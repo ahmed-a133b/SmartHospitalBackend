@@ -1,8 +1,22 @@
 # app/routers/iot.py
 from fastapi import APIRouter
+from pydantic import BaseModel
 from app.firebase_config import get_ref
-
+from datetime import datetime
 router = APIRouter(prefix="/iotData", tags=["IoT Sensor Data"])
+
+class VitalsData(BaseModel):
+    heartRate: float
+    oxygenLevel: float
+    temperature: float
+    bloodPressure: dict
+    respiratoryRate: float
+    glucose: float
+    bedOccupancy: bool = False
+    patientId: str
+    deviceStatus: str = "online"
+    batteryLevel: float = 100.0
+    signalStrength: float = 100.0
 
 @router.get("/")
 def get_all_devices():
@@ -29,3 +43,13 @@ def get_latest_vitals(device_id: str):
 
     latest_ts = sorted(vitals.keys())[-1]
     return {"timestamp": latest_ts, "data": vitals[latest_ts]}
+
+@router.post("/{device_id}/vitals")
+def post_vitals(device_id: str, data: VitalsData):
+    timestamp = datetime.utcnow().isoformat()
+    ref = get_ref(f"iotData/{device_id}/vitals/{timestamp}")
+    ref.set(data.dict())
+    return {
+        "message": f"Vitals saved for device {device_id}",
+        "timestamp": timestamp
+    }
