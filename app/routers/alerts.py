@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from firebase_config import get_ref
+from app.firebase_config import get_ref
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 

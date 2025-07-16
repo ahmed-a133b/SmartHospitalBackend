@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-from routers import patients, predictions, alerts, staff, iot
-from firebase_config import init_firebase
+from app.routers import patients, predictions, alerts, staff, iot
+from app.firebase_config import init_firebase
 from fastapi.middleware.cors import CORSMiddleware
-from routers import realtime
+from app.routers import realtime
 
 
 app = FastAPI(title="Smart Hospital API")
