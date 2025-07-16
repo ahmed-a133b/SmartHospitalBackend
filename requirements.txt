@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]               # For running the FastAPI server
+firebase-admin                 # Firebase Realtime Database access
+python-dotenv                  # To load .env files
+pydantic                       # Data validation (already used in FastAPI)
+joblib                         # For loading ML models (e.g., sklearn)
+scikit-learn                   # If your models were trained in sklearn
+numpy                          # For prediction input arrays
+python-multipart               # For handling file uploads 
+
