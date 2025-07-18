@@ -23,7 +23,7 @@ app.add_middleware(
 init_firebase()
 
 app.include_router(patients.router)
-#app.include_router(predictions.router)
+app.include_router(predictions.router)
 app.include_router(alerts.router)
 app.include_router(staff.router)
 app.include_router(iot.router)
