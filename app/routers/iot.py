@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from app.firebase_config import get_ref
 from datetime import datetime
+import re
 router = APIRouter(prefix="/iotData", tags=["IoT Sensor Data"])
 
 class VitalsData(BaseModel):
@@ -17,6 +18,14 @@ class VitalsData(BaseModel):
     deviceStatus: str = "online"
     batteryLevel: float = 100.0
     signalStrength: float = 100.0
+
+def sanitize_timestamp(timestamp):
+        # Convert ISO timestamp to a Firebase-safe string
+        # Replace colons, periods, and other invalid characters
+        sanitized = re.sub(r'[.:]', '-', timestamp)
+        # Remove any other invalid characters for Firebase paths
+        sanitized = re.sub(r'[#\$\[\]]', '', sanitized)
+        return sanitized
 
 @router.get("/")
 def get_all_devices():
@@ -46,9 +55,11 @@ def get_latest_vitals(device_id: str):
 
 @router.post("/{device_id}/vitals")
 def post_vitals(device_id: str, data: VitalsData):
-    timestamp = datetime.utcnow().isoformat()
+
+    timestamp = datetime.now().isoformat()
+    timestamp = sanitize_timestamp(timestamp)
     ref = get_ref(f"iotData/{device_id}/vitals/{timestamp}")
-    ref.set(data.dict())
+    ref.set(data.model_dump())
     return {
         "message": f"Vitals saved for device {device_id}",
         "timestamp": timestamp
