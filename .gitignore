@@ -3,4 +3,5 @@ __pycache__/
 .env
 *.env
 venv/
-train_patient_risk.py
+smart_hospital_schema.md
+Smart Hospital Digital Twin .pdf

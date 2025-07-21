@@ -9,3 +9,6 @@ numpy                          # For prediction input arrays
 python-multipart               # For handling file uploads 
 datetime                       # For handling timestamps
 pandas                         # For data manipulation (e.g., reading CSV files)
+scipy                          # For statistical functions
+matplotlib                     # For plotting (optional, for debugging)
+seaborn                        # For advanced plotting (optional)
