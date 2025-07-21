@@ -161,6 +161,365 @@ def generate_sample_data():
         }
     }
 
+    # Generate patients data
+    patients_data = {
+        "patient_1": {
+            "personalInfo": {
+                "name": "Robert Johnson",
+                "age": 65,
+                "gender": "Male",
+                "admissionDate": format_datetime_for_firebase(current_time - timedelta(days=3)),
+                "ward": "Cardiology",
+                "roomId": "room_1",
+                "bedId": "bed_1"
+            },
+            "medicalHistory": {
+                "conditions": ["hypertension", "diabetes", "coronary_artery_disease"],
+                "medications": [
+                    {
+                        "name": "Lisinopril",
+                        "dosage": "10mg",
+                        "frequency": "once daily",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=30))
+                    },
+                    {
+                        "name": "Metformin",
+                        "dosage": "500mg",
+                        "frequency": "twice daily",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=90))
+                    },
+                    {
+                        "name": "Aspirin",
+                        "dosage": "81mg",
+                        "frequency": "once daily",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=180))
+                    }
+                ],
+                "allergies": ["penicillin", "shellfish"],
+                "lastCheckup": format_datetime_for_firebase(current_time - timedelta(hours=6)),
+                "admissionReason": "Chest pain and elevated blood pressure"
+            },
+            "currentStatus": {
+                "diagnosis": "Acute coronary syndrome",
+                "status": "stable",
+                "consciousness": "alert",
+                "mobility": "limited",
+                "lastUpdated": format_datetime_for_firebase(current_time - timedelta(minutes=30))
+            },
+            "predictions": {
+                "riskLevel": "high",
+                "riskScore": 75,
+                "confidence": 0.85,
+                "predictedAt": format_datetime_for_firebase(current_time - timedelta(minutes=15)),
+                "nextPrediction": format_datetime_for_firebase(current_time + timedelta(hours=4)),
+                "factors": ["elevated_blood_pressure", "cardiac_history", "age_factor"]
+            }
+        },
+        "patient_2": {
+            "personalInfo": {
+                "name": "Maria Rodriguez",
+                "age": 42,
+                "gender": "Female",
+                "admissionDate": format_datetime_for_firebase(current_time - timedelta(days=1)),
+                "ward": "Pulmonology",
+                "roomId": "room_2",
+                "bedId": "bed_3"
+            },
+            "medicalHistory": {
+                "conditions": ["asthma", "pneumonia"],
+                "medications": [
+                    {
+                        "name": "Albuterol",
+                        "dosage": "90mcg",
+                        "frequency": "as needed",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=1))
+                    },
+                    {
+                        "name": "Prednisone",
+                        "dosage": "20mg",
+                        "frequency": "once daily",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=1))
+                    },
+                    {
+                        "name": "Azithromycin",
+                        "dosage": "250mg",
+                        "frequency": "once daily",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(days=1))
+                    }
+                ],
+                "allergies": ["latex"],
+                "lastCheckup": format_datetime_for_firebase(current_time - timedelta(hours=2)),
+                "admissionReason": "Severe asthma exacerbation with pneumonia"
+            },
+            "currentStatus": {
+                "diagnosis": "Acute pneumonia with asthma exacerbation",
+                "status": "critical",
+                "consciousness": "alert",
+                "mobility": "bedrest",
+                "lastUpdated": format_datetime_for_firebase(current_time - timedelta(minutes=15))
+            },
+            "predictions": {
+                "riskLevel": "critical",
+                "riskScore": 90,
+                "confidence": 0.92,
+                "predictedAt": format_datetime_for_firebase(current_time - timedelta(minutes=10)),
+                "nextPrediction": format_datetime_for_firebase(current_time + timedelta(hours=2)),
+                "factors": ["respiratory_distress", "infection_markers", "oxygen_saturation"]
+            }
+        },
+        "patient_3": {
+            "personalInfo": {
+                "name": "James Thompson",
+                "age": 28,
+                "gender": "Male",
+                "admissionDate": format_datetime_for_firebase(current_time - timedelta(hours=8)),
+                "ward": "Cardiology",
+                "roomId": "room_3",
+                "bedId": "bed_4"
+            },
+            "medicalHistory": {
+                "conditions": ["anxiety", "palpitations"],
+                "medications": [
+                    {
+                        "name": "Propranolol",
+                        "dosage": "10mg",
+                        "frequency": "as needed",
+                        "startDate": format_datetime_for_firebase(current_time - timedelta(hours=6))
+                    }
+                ],
+                "allergies": [],
+                "lastCheckup": format_datetime_for_firebase(current_time - timedelta(hours=1)),
+                "admissionReason": "Chest pain and palpitations, rule out cardiac causes"
+            },
+            "currentStatus": {
+                "diagnosis": "Anxiety-related chest pain",
+                "status": "stable",
+                "consciousness": "alert",
+                "mobility": "ambulatory",
+                "lastUpdated": format_datetime_for_firebase(current_time - timedelta(minutes=45))
+            },
+            "predictions": {
+                "riskLevel": "low",
+                "riskScore": 25,
+                "confidence": 0.78,
+                "predictedAt": format_datetime_for_firebase(current_time - timedelta(minutes=30)),
+                "nextPrediction": format_datetime_for_firebase(current_time + timedelta(hours=6)),
+                "factors": ["vital_signs_stable", "young_age", "no_cardiac_history"]
+            }
+        }
+    }
+
+    # Generate IoT devices data with alerts
+    iot_data = {
+        "monitor_1": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "heartRate": 85,
+                    "oxygenLevel": 96,
+                    "temperature": 37.2,
+                    "bloodPressure": {
+                        "systolic": 145,
+                        "diastolic": 95
+                    },
+                    "respiratoryRate": 18,
+                    "glucose": 140,
+                    "bedOccupancy": True,
+                    "patientId": "patient_1",
+                    "deviceStatus": "online",
+                    "batteryLevel": 85,
+                    "signalStrength": 95,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                },
+                format_datetime_for_firebase(current_time - timedelta(minutes=5)): {
+                    "heartRate": 88,
+                    "oxygenLevel": 95,
+                    "temperature": 37.3,
+                    "bloodPressure": {
+                        "systolic": 150,
+                        "diastolic": 98
+                    },
+                    "respiratoryRate": 20,
+                    "glucose": 145,
+                    "bedOccupancy": True,
+                    "patientId": "patient_1",
+                    "deviceStatus": "online",
+                    "batteryLevel": 85,
+                    "signalStrength": 94,
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=5))
+                }
+            },
+            "deviceInfo": {
+                "type": "vitals_monitor",
+                "manufacturer": "MedTech Systems",
+                "model": "VM-2024",
+                "roomId": "room_1",
+                "bedId": "bed_1",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=7)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=23)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=90))
+            },
+            "alerts": {
+                "alert_1": {
+                    "type": "critical",
+                    "message": "Blood pressure critically high - 150/98 mmHg",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=5)),
+                    "resolved": False,
+                    "assignedTo": "staff_1"
+                },
+                "alert_2": {
+                    "type": "warning",
+                    "message": "Heart rate elevated - 88 bpm",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=10)),
+                    "resolved": True,
+                    "resolvedBy": "staff_4",
+                    "resolvedAt": format_datetime_for_firebase(current_time - timedelta(minutes=2))
+                }
+            }
+        },
+        "monitor_2": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "heartRate": 110,
+                    "oxygenLevel": 88,
+                    "temperature": 38.5,
+                    "bloodPressure": {
+                        "systolic": 120,
+                        "diastolic": 80
+                    },
+                    "respiratoryRate": 28,
+                    "glucose": 95,
+                    "bedOccupancy": True,
+                    "patientId": "patient_2",
+                    "deviceStatus": "online",
+                    "batteryLevel": 92,
+                    "signalStrength": 88,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                }
+            },
+            "deviceInfo": {
+                "type": "vitals_monitor",
+                "manufacturer": "HealthMonitor Inc",
+                "model": "HM-Pro",
+                "roomId": "room_2",
+                "bedId": "bed_3",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=3)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=27)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=85))
+            },
+            "alerts": {
+                "alert_3": {
+                    "type": "critical",
+                    "message": "Oxygen saturation critically low - 88%",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=2)),
+                    "resolved": False,
+                    "assignedTo": "staff_2"
+                },
+                "alert_4": {
+                    "type": "critical",
+                    "message": "High fever detected - 38.5°C",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=8)),
+                    "resolved": False
+                },
+                "alert_5": {
+                    "type": "warning",
+                    "message": "Elevated respiratory rate - 28 breaths/min",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=15)),
+                    "resolved": True,
+                    "resolvedBy": "staff_2",
+                    "resolvedAt": format_datetime_for_firebase(current_time - timedelta(minutes=12))
+                }
+            }
+        },
+        "monitor_3": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "heartRate": 72,
+                    "oxygenLevel": 99,
+                    "temperature": 36.8,
+                    "bloodPressure": {
+                        "systolic": 115,
+                        "diastolic": 75
+                    },
+                    "respiratoryRate": 16,
+                    "glucose": 90,
+                    "bedOccupancy": True,
+                    "patientId": "patient_3",
+                    "deviceStatus": "online",
+                    "batteryLevel": 78,
+                    "signalStrength": 92,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                }
+            },
+            "deviceInfo": {
+                "type": "vitals_monitor",
+                "manufacturer": "MedTech Systems",
+                "model": "VM-2024",
+                "roomId": "room_3",
+                "bedId": "bed_4",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=12)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=18)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=78))
+            },
+            "alerts": {
+                "alert_6": {
+                    "type": "info",
+                    "message": "Battery level low - 78%",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=20)),
+                    "resolved": False,
+                    "assignedTo": "staff_3"
+                }
+            }
+        },
+        "monitor_4": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "heartRate": 78,
+                    "oxygenLevel": 97,
+                    "temperature": 36.9,
+                    "bloodPressure": {
+                        "systolic": 118,
+                        "diastolic": 78
+                    },
+                    "respiratoryRate": 14,
+                    "glucose": 88,
+                    "bedOccupancy": False,
+                    "patientId": "",
+                    "deviceStatus": "online",
+                    "batteryLevel": 65,
+                    "signalStrength": 89,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                }
+            },
+            "deviceInfo": {
+                "type": "vitals_monitor",
+                "manufacturer": "MedTech Systems",
+                "model": "VM-2024",
+                "roomId": "room_1",
+                "bedId": "bed_2",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=5)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=25)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=60))
+            },
+            "alerts": {
+                "alert_7": {
+                    "type": "info",
+                    "message": "Device ready for next patient",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(hours=1)),
+                    "resolved": True,
+                    "resolvedBy": "staff_3",
+                    "resolvedAt": format_datetime_for_firebase(current_time - timedelta(minutes=50))
+                },
+                "alert_8": {
+                    "type": "warning",
+                    "message": "Battery level getting low - 65%",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=30)),
+                    "resolved": False,
+                    "assignedTo": "staff_3"
+                }
+            }
+        }
+    }
+
     # Generate staff data
     staff_data = {
         "staff_1": {
@@ -392,8 +751,7 @@ def generate_sample_data():
     # Generate AI logs data
     ai_logs_data = {
         "log_1": {
-            "modelId": "decisionTree",
-            "modelVersion": "1.2.0",
+            "modelId": "patient_risk_model",
             "patientId": "patient_1",
             "inputData": {
                 "heartRate": 85,
@@ -427,44 +785,6 @@ def generate_sample_data():
                 "comments": "Accurate prediction, helpful recommendations",
                 "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=10))
             }
-        },
-        "log_2": {
-            "modelId": "lstm",
-            "modelVersion": "2.1.0",
-            "patientId": "patient_2",
-            "inputData": {
-                "heartRate": 90,
-                "oxygenLevel": 92,
-                "temperature": 37.8,
-                "bloodPressure": {
-                    "systolic": 125,
-                    "diastolic": 82
-                },
-                "respiratoryRate": 22,
-                "contextData": {
-                    "age": 45,
-                    "conditions": ["asthma", "copd"],
-                    "medications": ["albuterol"]
-                }
-            },
-            "output": {
-                "riskLevel": "Moderate",
-                "riskScore": 45,
-                "cluster": 2,
-                "recommendations": [
-                    "Monitor respiratory rate closely",
-                    "Consider supplemental oxygen"
-                ],
-                "alertTriggered": False
-            },
-            "timestamp": format_datetime_for_firebase(current_time),
-            "processingTime": 0.65,
-            "feedback": {
-                "providedBy": "staff_2",
-                "rating": 5,
-                "comments": "Early warning helped prevent exacerbation",
-                "timestamp": format_datetime_for_firebase(current_time + timedelta(minutes=5))
-            }
         }
     }
 
@@ -495,7 +815,9 @@ def generate_sample_data():
     return {
         "rooms": rooms_data,
         "beds": beds_data,
+        "patients": patients_data,
         "staff": staff_data,
+        "iotData": iot_data,
         "incidents": incidents_data,
         "inventory": inventory_data,
         "aiLogs": ai_logs_data,

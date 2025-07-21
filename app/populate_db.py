@@ -19,7 +19,9 @@ class DatabasePopulator:
         self.root_ref = db.reference('/')
         self.rooms_ref = db.reference('/rooms')
         self.beds_ref = db.reference('/beds')
+        self.patients_ref = db.reference('/patients')
         self.staff_ref = db.reference('/staff')
+        self.iot_ref = db.reference('/iotData')
         self.incidents_ref = db.reference('/incidents')
         self.inventory_ref = db.reference('/inventory')
         self.ai_logs_ref = db.reference('/aiLogs')
@@ -64,7 +66,9 @@ class DatabasePopulator:
             self.root_ref.update({
                 'rooms': data['rooms'],
                 'beds': data['beds'],
+                'patients': data['patients'],
                 'staff': data['staff'],
+                'iotData': data['iotData'],
                 'incidents': data['incidents'],
                 'inventory': data['inventory'],
                 'aiLogs': data['aiLogs'],

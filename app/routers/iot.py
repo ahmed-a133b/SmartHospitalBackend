@@ -1,5 +1,5 @@
 # app/routers/iot.py
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from app.firebase_config import get_ref
 from datetime import datetime
 import re
@@ -45,65 +45,62 @@ def get_latest_vitals(device_id: str):
     return {"timestamp": latest_ts, "data": vitals[latest_ts]}
 
 @router.post("/{device_id}/vitals")
-def post_vitals(device_id: str, data: dict, background_tasks: BackgroundTasks):
-    """Post new vitals data and trigger anomaly detection"""
-    from app.anomaly_detection import anomaly_engine
-    
+def post_vitals(device_id: str, data: dict):
+    """Post new vitals data"""
     timestamp = datetime.now().isoformat()
     timestamp = sanitize_timestamp(timestamp)
     ref = get_ref(f"iotData/{device_id}/vitals/{timestamp}")
     ref.set(data)
     
-    # Trigger anomaly detection in background
-    def detect_and_save_anomaly():
-        try:
-            # Get recent vitals for trend analysis
-            vitals_ref = get_ref(f"iotData/{device_id}/vitals")
-            recent_vitals_data = vitals_ref.get() or {}
-            
-            # Get last 10 readings for trend analysis
-            recent_readings = []
-            sorted_timestamps = sorted(recent_vitals_data.keys())[-10:]
-            for ts in sorted_timestamps:
-                recent_readings.append(recent_vitals_data[ts])
-            
-            # Perform anomaly detection
-            anomaly_result = anomaly_engine.detect_anomaly(
-                sensor_data=data,
-                device_id=device_id,
-                recent_data=recent_readings
-            )
-            
-            # Save anomaly log
-            safe_timestamp = anomaly_result["timestamp"].replace(':', '-').replace('.', '-')
-            anomaly_ref = get_ref(f"anomalies/{device_id}/{safe_timestamp}")
-            anomaly_ref.set(anomaly_result)
-            
-            # If anomaly detected, create alert
-            if anomaly_result["is_anomaly"]:
-                alert_data = {
-                    "device_id": device_id,
-                    "timestamp": anomaly_result["timestamp"],
-                    "severity_level": anomaly_result["severity_level"],
-                    "severity_score": anomaly_result["severity_score"],
-                    "anomaly_type": anomaly_result["anomaly_type"],
-                    "message": f"{anomaly_result['severity_level']} Alert: {', '.join(anomaly_result['anomaly_type'])} detected for device {device_id}",
-                    "resolved": False,
-                    "details": anomaly_result.get("details", {}),
-                    "trend_analysis": anomaly_result.get("trend_analysis", {})
-                }
-                
-                alert_ref = get_ref(f"iotData/{device_id}/alerts/{safe_timestamp}")
-                alert_ref.set(alert_data)
-                
-                logger.info(f"Anomaly alert created for device {device_id}: {alert_data['severity_level']}")
-                
-        except Exception as e:
-            logger.error(f"Error in background anomaly detection: {e}")
-    
-    background_tasks.add_task(detect_and_save_anomaly)
-    
     return {
         "message": f"Vitals saved for device {device_id}",
         "timestamp": timestamp
     }
+
+@router.post("/{device_id}/alerts/{alert_id}/resolve")
+def resolve_alert(device_id: str, alert_id: str, data: dict):
+    """Resolve an alert for a device"""
+    try:
+        alert_ref = get_ref(f"iotData/{device_id}/alerts/{alert_id}")
+        alert_data = alert_ref.get()
+        
+        if not alert_data:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        # Update alert with resolution data
+        alert_data["resolved"] = True
+        alert_data["resolvedBy"] = data.get("resolvedBy")
+        alert_data["resolvedAt"] = data.get("resolvedAt")
+        
+        # Save back to Firebase
+        alert_ref.set(alert_data)
+        
+        logger.info(f"Alert {alert_id} resolved for device {device_id}")
+        return {"message": "Alert resolved successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error resolving alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{device_id}/alerts/{alert_id}/assign")
+def assign_alert(device_id: str, alert_id: str, data: dict):
+    """Assign an alert to a staff member"""
+    try:
+        alert_ref = get_ref(f"iotData/{device_id}/alerts/{alert_id}")
+        alert_data = alert_ref.get()
+        
+        if not alert_data:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        # Update alert with assignment data
+        alert_data["assignedTo"] = data.get("assignedTo")
+        
+        # Save back to Firebase
+        alert_ref.set(alert_data)
+        
+        logger.info(f"Alert {alert_id} assigned to {data.get('assignedTo')} for device {device_id}")
+        return {"message": "Alert assigned successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error assigning alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
