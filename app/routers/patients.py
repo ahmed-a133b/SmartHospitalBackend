@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 import logging
+import re
 from app.firebase_config import get_ref
 
 # Configure logging
@@ -8,6 +9,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
+
+def get_next_patient_id() -> str:
+    """Generate the next sequential patient ID (patient_1, patient_2, etc.)"""
+    try:
+        ref = get_ref("patients")
+        patients = ref.get() or {}
+        
+        # Find all existing patient IDs that match the pattern patient_<number>
+        patient_numbers = []
+        pattern = re.compile(r'^patient_(\d+)$')
+        
+        for patient_id in patients.keys():
+            match = pattern.match(patient_id)
+            if match:
+                patient_numbers.append(int(match.group(1)))
+        
+        # Get the next number (highest + 1, or 1 if no patients exist)
+        next_number = max(patient_numbers) + 1 if patient_numbers else 1
+        return f"patient_{next_number}"
+        
+    except Exception as e:
+        logger.error(f"Error generating next patient ID: {str(e)}")
+        # Fallback to patient_1 if there's an error
+        return "patient_1"
 
 @router.get("/")
 async def get_all_patients(
@@ -62,13 +87,18 @@ async def get_patient(patient_id: str):
 
 @router.post("/")
 async def create_patient(patient: dict):
-    """Create a new patient record (no validation)"""
+    """Create a new patient record with sequential ID"""
     try:
-        ref = get_ref("patients")
-        new_patient_ref = ref.push(patient)
+        # Generate the next sequential patient ID
+        patient_id = get_next_patient_id()
+        
+        # Set the patient data at the specific ID
+        ref = get_ref(f"patients/{patient_id}")
+        ref.set(patient)
+        
         return {
             "message": "Patient created successfully",
-            "patient_id": new_patient_ref.key
+            "patient_id": patient_id
         }
     except Exception as e:
         logger.error(f"Error creating patient: {str(e)}")
@@ -79,7 +109,7 @@ async def update_patient(
     patient_id: str,
     patient: dict
 ):
-    """Update a patient's complete record (no validation)"""
+    """Update a patient's complete record"""
     try:
         ref = get_ref(f"patients/{patient_id}")
         if not ref.get():
