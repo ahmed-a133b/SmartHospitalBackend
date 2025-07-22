@@ -2,6 +2,8 @@ import os
 import json
 import time
 import random
+import signal
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List
 import threading
@@ -14,6 +16,19 @@ from vitals_simulator import VitalsSimulator
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Global flag for graceful shutdown
+shutdown_requested = False
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    global shutdown_requested
+    logger.info(f"Received signal {signum}, shutting down gracefully...")
+    shutdown_requested = True
+
+# Register signal handlers
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 def format_datetime_for_firebase(dt):
     """Format datetime in a Firebase-safe format (no colons or special chars)"""
@@ -84,7 +99,8 @@ class HospitalDataSimulator:
                 'patientId': monitor['patientId'],
                 'deviceStatus': 'online',
                 'batteryLevel': 85 + random.randint(0, 14),
-                'signalStrength': 85 + random.randint(0, 14)
+                'signalStrength': 85 + random.randint(0, 14),
+                'timestamp': format_datetime_for_firebase(current_time)
             }
             
             # Update vitals in Firebase
@@ -97,7 +113,10 @@ class HospitalDataSimulator:
 
     def start_vitals_simulation(self):
         """Start simulating vitals for all monitors"""
-        while True:
+        global shutdown_requested
+        logger.info("Starting vitals simulation...")
+        
+        while not shutdown_requested:
             try:
                 monitors = self.get_existing_monitors()
                 if not monitors:
@@ -106,19 +125,36 @@ class HospitalDataSimulator:
                     continue
                 
                 for monitor in monitors:
+                    if shutdown_requested:
+                        break
                     if monitor['patientId']:  # Only simulate if monitor has assigned patient
                         self.simulate_vitals_for_monitor(monitor)
                 
-                time.sleep(5)  # Wait 5 seconds before next update
+                # Sleep with periodic checks for shutdown
+                for _ in range(5):  # Check every second for 5 seconds total
+                    if shutdown_requested:
+                        break
+                    time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Error in vitals simulation: {str(e)}")
-                time.sleep(5)
+                if not shutdown_requested:
+                    time.sleep(5)
+        
+        logger.info("Vitals simulation stopped gracefully")
 
 def main():
     """Main function to start the vitals simulation"""
-    simulator = HospitalDataSimulator()
-    simulator.start_vitals_simulation()
+    try:
+        logger.info("Initializing Hospital Data Simulator...")
+        simulator = HospitalDataSimulator()
+        simulator.start_vitals_simulation()
+    except KeyboardInterrupt:
+        logger.info("Simulation interrupted by user")
+    except Exception as e:
+        logger.error(f"Error in simulation: {str(e)}")
+    finally:
+        logger.info("Simulation terminated")
 
 if __name__ == "__main__":
     main() 

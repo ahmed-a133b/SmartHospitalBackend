@@ -57,6 +57,30 @@ def post_vitals(device_id: str, data: dict):
         "timestamp": timestamp
     }
 
+@router.put("/{device_id}/deviceInfo")
+def update_device_info(device_id: str, device_info: dict):
+    """Update device information including room assignment"""
+    try:
+        # Get existing device data
+        device_data = get_ref(f"iotData/{device_id}").get()
+        if not device_data:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Update device info
+        device_data["deviceInfo"] = {**device_data.get("deviceInfo", {}), **device_info}
+        
+        # Save back to Firebase
+        get_ref(f"iotData/{device_id}").set(device_data)
+        
+        logger.info(f"Device {device_id} info updated")
+        return {"message": "Device info updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating device info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/{device_id}/alerts/{alert_id}/resolve")
 def resolve_alert(device_id: str, alert_id: str, data: dict):
     """Resolve an alert for a device"""

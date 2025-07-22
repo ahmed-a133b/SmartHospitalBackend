@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import patients, predictions, alerts, staff, iot, anomalies, rooms, beds
+from app.routers import patients, predictions, alerts, staff, iot, anomalies, rooms, beds, simulation
 from app.firebase_config import init_firebase
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import realtime
@@ -42,5 +42,6 @@ app.include_router(iot.router)
 app.include_router(anomalies.router)
 app.include_router(rooms.router)
 app.include_router(beds.router)
+app.include_router(simulation.router)
 #app.include_router(realtime.router)
 
