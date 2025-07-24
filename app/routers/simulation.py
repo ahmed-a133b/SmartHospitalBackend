@@ -94,10 +94,12 @@ async def start_simulation(background_tasks: BackgroundTasks):
                 detail=f"Simulation script not found at {script_path}"
             )
         
-        # Start the simulation process
+        # Start the simulation process with environment variables
+        env = os.environ.copy()  # Copy current environment variables
         simulation_process = subprocess.Popen(
             ["python", script_path],
             cwd=current_dir,
+            env=env,  # Pass environment variables
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -198,15 +200,30 @@ async def get_simulation_logs():
             return {"logs": "No simulation process running", "running": False}
         
         if simulation_process.poll() is not None:
-            return {"logs": "Simulation process has stopped", "running": False}
+            # Process has ended, get final output
+            try:
+                stdout, stderr = simulation_process.communicate(timeout=1)
+                return {
+                    "logs": f"Process ended.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}",
+                    "running": False,
+                    "return_code": simulation_process.returncode
+                }
+            except subprocess.TimeoutExpired:
+                return {"logs": "Process ended but unable to get output", "running": False}
         
-        # This is a simplified version - in production, you might want to
-        # implement proper log file handling or use a logging service
-        return {
-            "logs": "Simulation is running. Check server logs for detailed output.",
-            "running": True,
-            "pid": simulation_process.pid
-        }
+        # Process is still running, try to get current output
+        try:
+            # This won't work for real-time output, but we can check if the process is responsive
+            return {
+                "logs": f"Simulation is running with PID {simulation_process.pid}. Check server logs for detailed output.",
+                "running": True,
+                "pid": simulation_process.pid
+            }
+        except Exception as e:
+            return {
+                "logs": f"Error checking process: {str(e)}",
+                "running": False
+            }
         
     except Exception as e:
         logger.error(f"Error getting simulation logs: {str(e)}")

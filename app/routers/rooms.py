@@ -42,6 +42,38 @@ async def get_room(room_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch room: {str(e)}")
+@router.get("/{room_id}/devices")
+async def get_room_devices(room_id: str):
+    """Get all IoT devices assigned to a specific room"""
+    try:
+        # Check if room exists
+        room_ref = get_ref(f"rooms/{room_id}")
+        room_data = room_ref.get()
+        if not room_data:
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        # Get all IoT devices
+        iot_ref = get_ref("iotData")
+        all_devices = iot_ref.get() or {}
+        
+        # Filter devices assigned to this room
+        room_devices = {}
+        for device_id, device_data in all_devices.items():
+            device_info = device_data.get('deviceInfo', {})
+            device_room_id = device_info.get('roomId')
+            
+            if device_room_id == room_id:
+                room_devices[device_id] = device_data
+        
+        return {
+            "roomId": room_id,
+            "deviceCount": len(room_devices),
+            "devices": room_devices
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch room devices: {str(e)}")
 
 @router.post("/")
 async def create_room(room_data: RoomData):
@@ -356,6 +388,39 @@ async def unassign_device_from_room(device_id: str):
     if device_data:
         device_data['deviceInfo']['roomId'] = None
         device_ref.set(device_data)
+
+@router.get("/{room_id}/devices")
+async def get_room_devices(room_id: str):
+    """Get all IoT devices assigned to a specific room"""
+    try:
+        # Check if room exists
+        room_ref = get_ref(f"rooms/{room_id}")
+        room_data = room_ref.get()
+        if not room_data:
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        # Get all IoT devices
+        iot_ref = get_ref("iotData")
+        all_devices = iot_ref.get() or {}
+        
+        # Filter devices assigned to this room
+        room_devices = {}
+        for device_id, device_data in all_devices.items():
+            device_info = device_data.get('deviceInfo', {})
+            device_room_id = device_info.get('roomId')
+            
+            if device_room_id == room_id:
+                room_devices[device_id] = device_data
+        
+        return {
+            "roomId": room_id,
+            "deviceCount": len(room_devices),
+            "devices": room_devices
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch room devices: {str(e)}")
 
 @router.get("/stats/occupancy")
 async def get_room_occupancy_stats():

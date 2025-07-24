@@ -297,6 +297,69 @@ def unassign_patient_from_monitor(device_id: str):
         logger.error(f"Error unassigning patient from monitor: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/{device_id}/alerts/latest")
+def get_latest_alerts(device_id: str, limit: int = 10, include_resolved: bool = False):
+    """Get the latest alerts for a monitor device"""
+    try:
+        # Check if device exists
+        device_ref = get_ref(f"iotData/{device_id}")
+        device_data = device_ref.get()
+        
+        if not device_data:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Get alerts for the device
+        alerts_ref = get_ref(f"iotData/{device_id}/alerts")
+        alerts_data = alerts_ref.get() or {}
+        
+        if not alerts_data:
+            return {
+                "deviceId": device_id,
+                "alerts": [],
+                "count": 0,
+                "hasUnresolved": False
+            }
+        
+        # Convert alerts to list with IDs and filter based on resolved status
+        alerts_list = []
+        unresolved_count = 0
+        
+        for alert_id, alert_data in alerts_data.items():
+            alert_item = {
+                "id": alert_id,
+                **alert_data
+            }
+            
+            # Count unresolved alerts
+            if not alert_data.get("resolved", False):
+                unresolved_count += 1
+            
+            # Filter by resolved status if needed
+            if include_resolved or not alert_data.get("resolved", False):
+                alerts_list.append(alert_item)
+        
+        # Sort by timestamp (newest first)
+        alerts_list.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
+        # Limit results
+        if limit > 0:
+            alerts_list = alerts_list[:limit]
+        
+        return {
+            "deviceId": device_id,
+            "alerts": alerts_list,
+            "count": len(alerts_list),
+            "totalAlerts": len(alerts_data),
+            "unresolvedCount": unresolved_count,
+            "hasUnresolved": unresolved_count > 0
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting latest alerts for device {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{device_id}/available-patients")
 def get_available_patients_for_monitor(device_id: str):
     """Get available patients in the same room as the monitor for assignment"""

@@ -7,11 +7,19 @@ import logging
 import joblib
 import numpy as np
 import os
-
+import re
 from app.firebase_config import get_ref
 
 router = APIRouter(prefix="/anomalies", tags=["Anomaly Detection"])
 logger = logging.getLogger(__name__)
+
+def sanitize_timestamp(timestamp):
+        # Convert ISO timestamp to a Firebase-safe string
+        # Replace colons, periods, and other invalid characters
+        sanitized = re.sub(r'[.:]', '-', timestamp)
+        # Remove any other invalid characters for Firebase paths
+        sanitized = re.sub(r'[#\$\[\]]', '', sanitized)
+        return sanitized
 
 # Load the trained anomaly model
 def load_anomaly_model():
@@ -55,9 +63,10 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
     }
     
     if anomaly_model_data is None:
-        logger.warning("Anomaly model not loaded, using rule-based detection only")
-        result["details"]["model_status"] = "Model not available"
-        return rule_based_detection_only(sensor_data, device_id, result)
+        logger.warning("Anomaly model not loaded, skipping anomaly detection")
+        result["details"]["model_status"] = "Model not available - no detection performed"
+        result["severity_level"] = "NORMAL"
+        return result
     
     try:
         model = anomaly_model_data['model']
@@ -92,24 +101,19 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
         
         if result["is_anomaly"]:
             result["anomaly_type"].append("Statistical Outlier")
-            result["severity_level"] = "HIGH" if float(anomaly_score) < -0.5 else "MEDIUM"
-            result["severity_score"] = float(abs(anomaly_score)) * 10
+            # Adjust thresholds for better accuracy
+            if float(anomaly_score) < -0.3:  # More restrictive threshold
+                result["severity_level"] = "HIGH"
+                result["severity_score"] = float(abs(anomaly_score)) * 10
+            elif float(anomaly_score) < -0.15:  # Medium threshold
+                result["severity_level"] = "MEDIUM" 
+                result["severity_score"] = float(abs(anomaly_score)) * 8
+            else:  # Low severity for weak anomalies
+                result["severity_level"] = "LOW"
+                result["severity_score"] = float(abs(anomaly_score)) * 5
         
-        # Also check rule-based thresholds
-        rule_result = check_vital_thresholds(sensor_data)
-        if rule_result["violations"]:
-            result["is_anomaly"] = True
-            result["anomaly_type"].extend(rule_result["violations"])
-            result["details"]["rule_violations"] = rule_result["details"]
-            
-            # Update severity based on rule violations
-            if any("Critical" in violation for violation in rule_result["violations"]):
-                result["severity_level"] = "CRITICAL"
-                result["severity_score"] = float(max(result["severity_score"], 8.0))
-            elif result["severity_level"] == "NORMAL":
-                result["severity_level"] = "MEDIUM"
-                result["severity_score"] = float(max(result["severity_score"], 4.0))
-        
+        # Add confidence assessment to details
+        result["details"]["confidence_assessment"] = "High" if result["confidence"] > 0.5 else "Medium" if result["confidence"] > 0.2 else "Low"
         result["details"]["model_status"] = "Model loaded and functional"
         
         # Ensure all numeric values are JSON serializable Python types
@@ -121,91 +125,11 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
     except Exception as e:
         logger.error(f"Error in model-based anomaly detection: {e}")
         result["details"]["model_error"] = str(e)
-        return rule_based_detection_only(sensor_data, device_id, result)
+        result["severity_level"] = "NORMAL"
+        result["details"]["model_status"] = "Model error - no detection performed"
+        return result
     
     return result
-
-def rule_based_detection_only(sensor_data: Dict, device_id: str, result: Dict) -> Dict:
-    """
-    Fallback to rule-based detection when model is not available
-    """
-    rule_result = check_vital_thresholds(sensor_data)
-    if rule_result["violations"]:
-        result["is_anomaly"] = True
-        result["anomaly_type"] = rule_result["violations"]
-        result["details"]["rule_violations"] = rule_result["details"]
-        
-        # Determine severity
-        if any("Critical" in violation for violation in rule_result["violations"]):
-            result["severity_level"] = "CRITICAL"
-            result["severity_score"] = 8.0
-        else:
-            result["severity_level"] = "MEDIUM"
-            result["severity_score"] = 4.0
-    
-    # Ensure all numeric values are Python types
-    result["anomaly_score"] = float(result["anomaly_score"])
-    result["severity_score"] = float(result["severity_score"])
-    result["confidence"] = float(result["confidence"])
-    
-    return result
-
-def check_vital_thresholds(data: Dict) -> Dict:
-    """
-    Rule-based anomaly detection using predefined thresholds
-    """
-    violations = []
-    details = {}
-    
-    # Vital sign thresholds
-    vital_thresholds = {
-        'heart_rate': {'low': 60, 'high': 100, 'critical_low': 40, 'critical_high': 120},
-        'systolic_bp': {'low': 90, 'high': 140, 'critical_low': 70, 'critical_high': 180},
-        'diastolic_bp': {'low': 60, 'high': 90, 'critical_low': 40, 'critical_high': 110},
-        'temperature': {'low': 36.1, 'high': 37.2, 'critical_low': 35.0, 'critical_high': 39.0},
-        'oxygen_level': {'low': 95, 'high': 100, 'critical_low': 90, 'critical_high': 100},
-        'respiratory_rate': {'low': 12, 'high': 20, 'critical_low': 8, 'critical_high': 30},
-        'glucose': {'low': 70, 'high': 140, 'critical_low': 50, 'critical_high': 200}
-    }
-    
-    # Environment thresholds
-    environment_thresholds = {
-        'room_temperature': {'low': 20, 'high': 24, 'critical_low': 15, 'critical_high': 30},
-        'humidity': {'low': 40, 'high': 60, 'critical_low': 20, 'critical_high': 80},
-        'air_quality': {'low': 0, 'high': 50, 'critical_low': 0, 'critical_high': 100}
-    }
-    
-    # Check vital signs
-    for vital, value in data.items():
-        if vital in vital_thresholds:
-            thresholds = vital_thresholds[vital]
-            
-            if value < thresholds['critical_low']:
-                violations.append(f"Critical Low {vital.replace('_', ' ').title()}")
-                details[vital] = f"Value {value} below critical threshold {thresholds['critical_low']}"
-            elif value > thresholds['critical_high']:
-                violations.append(f"Critical High {vital.replace('_', ' ').title()}")
-                details[vital] = f"Value {value} above critical threshold {thresholds['critical_high']}"
-            elif value < thresholds['low']:
-                violations.append(f"Low {vital.replace('_', ' ').title()}")
-                details[vital] = f"Value {value} below normal threshold {thresholds['low']}"
-            elif value > thresholds['high']:
-                violations.append(f"High {vital.replace('_', ' ').title()}")
-                details[vital] = f"Value {value} above normal threshold {thresholds['high']}"
-    
-    # Check environment
-    for param, value in data.items():
-        if param in environment_thresholds:
-            thresholds = environment_thresholds[param]
-            
-            if value < thresholds['critical_low'] or value > thresholds['critical_high']:
-                violations.append(f"Critical Environment: {param.replace('_', ' ').title()}")
-                details[param] = f"Value {value} outside critical range [{thresholds['critical_low']}, {thresholds['critical_high']}]"
-            elif value < thresholds['low'] or value > thresholds['high']:
-                violations.append(f"Environment Alert: {param.replace('_', ' ').title()}")
-                details[param] = f"Value {value} outside normal range [{thresholds['low']}, {thresholds['high']}]"
-    
-    return {"violations": violations, "details": details}
 
 class AnomalyAlert(BaseModel):
     device_id: str
@@ -218,7 +142,23 @@ class AnomalyAlert(BaseModel):
 def get_recent_vitals(device_id: str, hours: int = 1) -> List[Dict]:
     """Get recent vitals for trend analysis"""
     try:
-        vitals_ref = get_ref(f"iotData/{device_id}/vitals")
+        # First get the device to check current patient assignment
+        device_ref = get_ref(f"iotData/{device_id}")
+        device_data = device_ref.get()
+        
+        if not device_data:
+            logger.warning(f"Device {device_id} not found")
+            return []
+        
+        # Get current patient ID
+        current_patient_id = device_data.get("deviceInfo", {}).get("currentPatientId")
+        
+        if not current_patient_id:
+            logger.warning(f"No patient assigned to device {device_id}")
+            return []
+        
+        # Get vitals for the current patient
+        vitals_ref = get_ref(f"iotData/{device_id}/vitals/{current_patient_id}")
         vitals_data = vitals_ref.get() or {}
         
         # Filter by time (last N hours)
@@ -322,22 +262,39 @@ async def detect_anomaly(monitor_id: str, background_tasks: BackgroundTasks):
     Detect anomalies for a specific monitor by getting its latest vitals
     """
     try:
-        # Get latest vitals for the monitor
-        vitals_ref = get_ref(f"iotData/{monitor_id}/vitals")
-        vitals_data = vitals_ref.get() or {}
+        # Get device data first to check if it exists and has a patient assigned
+        device_ref = get_ref(f"iotData/{monitor_id}")
+        device_data = device_ref.get()
         
-        if not vitals_data:
-            raise HTTPException(status_code=404, detail=f"No vitals data found for monitor {monitor_id}")
+        if not device_data:
+            raise HTTPException(status_code=404, detail=f"Monitor {monitor_id} not found")
         
-        # Get the most recent reading
-        latest_timestamp = sorted(vitals_data.keys())[-1]
-        latest_vitals = vitals_data[latest_timestamp]
+        # Check if a patient is currently assigned to this monitor
+        current_patient_id = device_data.get("deviceInfo", {}).get("currentPatientId")
+        
+        if not current_patient_id:
+            raise HTTPException(status_code=400, detail=f"No patient assigned to monitor {monitor_id}")
+        
+        # Get vitals for the current patient
+        vitals_ref = get_ref(f"iotData/{monitor_id}/vitals/{current_patient_id}")
+        patient_vitals = vitals_ref.get() or {}
+        
+        if not patient_vitals:
+            raise HTTPException(status_code=404, detail=f"No vitals data found for patient {current_patient_id} on monitor {monitor_id}")
+        
+        # Get the most recent reading for this patient
+        latest_timestamp = sorted(patient_vitals.keys())[-1]
+        latest_vitals = patient_vitals[latest_timestamp]
         
         # Perform anomaly detection
         anomaly_result = detect_anomaly_with_model(
             sensor_data=latest_vitals,
             device_id=monitor_id
         )
+        
+        # Add patient context to the result
+        anomaly_result["patient_id"] = current_patient_id
+        anomaly_result["vitals_timestamp"] = latest_timestamp
         
         # Save results in background
         background_tasks.add_task(save_anomaly_log, anomaly_result)

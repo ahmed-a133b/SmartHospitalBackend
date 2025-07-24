@@ -287,11 +287,13 @@ class EnhancedHospitalDataSimulator:
         
     def init_firebase(self):
         """Initialize Firebase connection"""
+        logger.info("Initializing Firebase connection...")
         load_dotenv()
         json_str = os.getenv("FIREBASE_KEY_JSON")
         db_url = os.getenv("FIREBASE_DATABASE_URL")
 
         if not json_str or not db_url:
+            logger.error("Missing FIREBASE_KEY_JSON or FIREBASE_DATABASE_URL environment variables")
             raise ValueError("Missing FIREBASE_KEY_JSON or FIREBASE_DATABASE_URL")
 
         try:
@@ -301,30 +303,44 @@ class EnhancedHospitalDataSimulator:
                 firebase_admin.initialize_app(cred, {
                     'databaseURL': db_url
                 })
+                logger.info("Firebase initialized successfully")
+            else:
+                logger.info("Firebase already initialized")
         except json.JSONDecodeError as e:
+            logger.error(f"Invalid FIREBASE_KEY_JSON: {str(e)}")
             raise ValueError("Invalid FIREBASE_KEY_JSON") from e
+        except Exception as e:
+            logger.error(f"Error initializing Firebase: {str(e)}")
+            raise
     
     def load_patient_profiles(self):
         """Load patient data and create profiles for simulation"""
         try:
+            logger.info("Starting to load patient profiles...")
             # Get monitors and their assigned patients
             iot_ref = db.reference('iotData')
             monitors_data = iot_ref.get()
             
             if not monitors_data:
-                logger.warning("No IoT monitors found")
+                logger.warning("No IoT monitors found in Firebase")
                 return
+            
+            logger.info(f"Found {len(monitors_data)} monitors in Firebase")
             
             # Get patient data
             patients_ref = db.reference('patients')
             patients_data = patients_ref.get() or {}
             
+            logger.info(f"Found {len(patients_data)} patients in Firebase")
+            
             for monitor_id, monitor_data in monitors_data.items():
                 device_info = monitor_data.get('deviceInfo', {})
+                logger.info(f"Processing monitor {monitor_id} with device type: {device_info.get('type', 'unknown')}")
                 
                 if device_info.get('type') == 'vitals_monitor':
                     # Get patient ID from latest vitals or device info
                     patient_id = device_info.get('currentPatientId')
+                    logger.info(f"Monitor {monitor_id} has currentPatientId: {patient_id}")
                     
                     if not patient_id:
                         # Try to get from latest vitals - check if we have vitals organized by patient
@@ -335,6 +351,7 @@ class EnhancedHospitalDataSimulator:
                             for potential_patient_id, patient_vitals in vitals.items():
                                 if patient_vitals:  # This patient has vitals data
                                     patient_id = potential_patient_id
+                                    logger.info(f"Found patient ID from vitals: {patient_id}")
                                     break
                     
                     if patient_id and patient_id in patients_data:
@@ -355,7 +372,9 @@ class EnhancedHospitalDataSimulator:
                         )
                         
                         self.patient_profiles[monitor_id] = profile
-                        logger.info(f"Loaded profile for patient {patient_id} on monitor {monitor_id}")
+                        logger.info(f"Successfully loaded profile for patient {patient_id} on monitor {monitor_id}")
+                    else:
+                        logger.warning(f"No patient found for monitor {monitor_id} (patient_id: {patient_id})")
                 
                 elif device_info.get('type') == 'environmental_sensor':
                     # Store environmental sensor info
@@ -364,11 +383,14 @@ class EnhancedHospitalDataSimulator:
                         'roomType': device_info.get('roomType', 'general_ward'),
                         'deviceInfo': device_info
                     }
+                    logger.info(f"Loaded environmental sensor {monitor_id}")
             
             logger.info(f"Loaded {len(self.patient_profiles)} patient profiles and {len(self.environmental_sensors)} environmental sensors")
             
         except Exception as e:
             logger.error(f"Error loading patient profiles: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
     
     def determine_risk_factors(self, personal_info: Dict, medical_history: Dict) -> List[str]:
         """Determine risk factors based on patient information"""
@@ -684,7 +706,13 @@ class EnhancedHospitalDataSimulator:
         
         if not self.patient_profiles and not self.environmental_sensors:
             logger.error("No patient profiles or environmental sensors loaded. Cannot start simulation.")
+            logger.error("This usually means:")
+            logger.error("1. No IoT devices are configured in Firebase")
+            logger.error("2. No patients are assigned to devices")
+            logger.error("3. Firebase connection issues")
             return
+        
+        logger.info(f"Starting simulation with {len(self.patient_profiles)} patients and {len(self.environmental_sensors)} environmental sensors")
         
         while not shutdown_requested:
             try:
@@ -692,16 +720,24 @@ class EnhancedHospitalDataSimulator:
                 logger.info(f"Simulation cycle {self.simulation_cycle}")
                 
                 # Simulate patient vitals
+                vitals_simulated = 0
                 for monitor_id, patient_profile in self.patient_profiles.items():
                     if shutdown_requested:
                         break
+                    logger.debug(f"Simulating vitals for monitor {monitor_id}, patient {patient_profile.patientId}")
                     self.simulate_patient_vitals(monitor_id, patient_profile)
+                    vitals_simulated += 1
                 
                 # Simulate environmental data
+                env_simulated = 0
                 for sensor_id, sensor_info in self.environmental_sensors.items():
                     if shutdown_requested:
                         break
+                    logger.debug(f"Simulating environmental data for sensor {sensor_id}")
                     self.simulate_environmental_data(sensor_id, sensor_info)
+                    env_simulated += 1
+                
+                logger.info(f"Cycle {self.simulation_cycle} complete: {vitals_simulated} vitals, {env_simulated} environmental readings")
                 
                 # Periodically reload patient profiles to catch updates
                 if self.simulation_cycle % 20 == 0:  # Every 20 cycles (~100 seconds)
@@ -716,6 +752,8 @@ class EnhancedHospitalDataSimulator:
                 
             except Exception as e:
                 logger.error(f"Error in simulation cycle: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 if not shutdown_requested:
                     time.sleep(5)
         
