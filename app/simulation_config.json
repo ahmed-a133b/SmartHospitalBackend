@@ -1,0 +1,120 @@
+{
+    "simulation_config": {
+        "update_interval_seconds": 5,
+        "anomaly_base_probabilities": {
+            "cardiac_arrhythmia": 0.02,
+            "hypertensive_crisis": 0.015,
+            "hypotensive_shock": 0.01,
+            "respiratory_distress": 0.025,
+            "hypoxemia": 0.02,
+            "fever_spike": 0.03,
+            "hypothermia": 0.008,
+            "hyperglycemia": 0.025,
+            "hypoglycemia": 0.015,
+            "tachycardia": 0.03,
+            "bradycardia": 0.02
+        },
+        "environmental_hazard_probabilities": {
+            "temperature_extreme": 0.01,
+            "humidity_extreme": 0.015,
+            "air_quality_poor": 0.02,
+            "noise_excessive": 0.008,
+            "contamination_risk": 0.003
+        },
+        "risk_factor_multipliers": {
+            "elderly": 1.5,
+            "pediatric": 1.2,
+            "cardiac_risk": 3.0,
+            "diabetic_risk": 2.5,
+            "respiratory_risk": 2.8,
+            "critical_condition": 2.0
+        },
+        "vital_ranges": {
+            "normal": {
+                "heart_rate": {"min": 60, "max": 100},
+                "blood_pressure_systolic": {"min": 110, "max": 140},
+                "blood_pressure_diastolic": {"min": 70, "max": 90},
+                "oxygen_level": {"min": 95, "max": 100},
+                "temperature": {"min": 36.1, "max": 37.8},
+                "respiratory_rate": {"min": 12, "max": 20},
+                "glucose": {"min": 80, "max": 140}
+            },
+            "critical_thresholds": {
+                "heart_rate": {"low": 50, "high": 150},
+                "blood_pressure_systolic": {"low": 90, "high": 180},
+                "blood_pressure_diastolic": {"low": 60, "high": 110},
+                "oxygen_level": {"low": 88, "high": null},
+                "temperature": {"low": 35.0, "high": 39.5},
+                "respiratory_rate": {"low": 8, "high": 30},
+                "glucose": {"low": 60, "high": 300}
+            }
+        },
+        "environmental_ranges": {
+            "normal": {
+                "temperature": {"min": 20, "max": 24},
+                "humidity": {"min": 40, "max": 60},
+                "air_quality": {"min": 80, "max": 100},
+                "noise_level": {"min": 25, "max": 45},
+                "co2_level": {"min": 350, "max": 600}
+            },
+            "alert_thresholds": {
+                "temperature": {"low": 18, "high": 28},
+                "humidity": {"low": 30, "high": 70},
+                "air_quality": {"low": 50, "high": null},
+                "noise_level": {"low": null, "high": 70},
+                "co2_level": {"low": null, "high": 1000}
+            }
+        },
+        "medical_scenarios": {
+            "cardiac_event_sequence": {
+                "description": "Simulates progression of cardiac events",
+                "stages": [
+                    {"duration_minutes": 5, "severity": 0.3, "symptoms": ["mild_chest_discomfort"]},
+                    {"duration_minutes": 10, "severity": 0.6, "symptoms": ["tachycardia", "mild_hypotension"]},
+                    {"duration_minutes": 15, "severity": 0.9, "symptoms": ["severe_arrhythmia", "hypotension"]}
+                ]
+            },
+            "respiratory_failure_sequence": {
+                "description": "Simulates progressive respiratory failure",
+                "stages": [
+                    {"duration_minutes": 8, "severity": 0.4, "symptoms": ["mild_dyspnea", "slight_desaturation"]},
+                    {"duration_minutes": 12, "severity": 0.7, "symptoms": ["moderate_dyspnea", "significant_desaturation"]},
+                    {"duration_minutes": 20, "severity": 1.0, "symptoms": ["severe_dyspnea", "critical_hypoxemia"]}
+                ]
+            },
+            "diabetic_emergency_sequence": {
+                "description": "Simulates diabetic ketoacidosis or severe hypoglycemia",
+                "stages": [
+                    {"duration_minutes": 10, "severity": 0.5, "symptoms": ["glucose_instability"]},
+                    {"duration_minutes": 15, "severity": 0.8, "symptoms": ["severe_glucose_abnormality", "altered_mental_status"]},
+                    {"duration_minutes": 25, "severity": 1.0, "symptoms": ["critical_glucose_levels", "unconsciousness_risk"]}
+                ]
+            },
+            "sepsis_progression": {
+                "description": "Simulates sepsis progression",
+                "stages": [
+                    {"duration_minutes": 15, "severity": 0.3, "symptoms": ["mild_fever", "slight_tachycardia"]},
+                    {"duration_minutes": 20, "severity": 0.6, "symptoms": ["high_fever", "tachycardia", "mild_hypotension"]},
+                    {"duration_minutes": 30, "severity": 0.9, "symptoms": ["severe_fever", "hypotensive_shock", "organ_dysfunction"]}
+                ]
+            }
+        },
+        "alert_escalation_rules": {
+            "critical_immediate": {
+                "conditions": ["oxygen_level < 80", "systolic_bp < 80", "heart_rate > 180", "temperature < 35"],
+                "action": "immediate_notification",
+                "recipients": ["attending_physician", "nurse_manager", "rapid_response_team"]
+            },
+            "high_within_5min": {
+                "conditions": ["oxygen_level < 88", "systolic_bp < 90", "heart_rate > 150", "temperature > 39"],
+                "action": "urgent_notification",
+                "recipients": ["primary_nurse", "attending_physician"]
+            },
+            "medium_within_15min": {
+                "conditions": ["oxygen_level < 92", "glucose > 250", "glucose < 70"],
+                "action": "standard_notification",
+                "recipients": ["primary_nurse"]
+            }
+        }
+    }
+}

@@ -45,8 +45,6 @@ def generate_sample_data():
                 "temperature": 22.5,
                 "humidity": 45,
                 "airQuality": 95,
-                "lightLevel": 80,
-                "noiseLevel": 35,
                 "lastMeasured": format_datetime_for_firebase(current_time)
             }
         },
@@ -513,6 +511,134 @@ def generate_sample_data():
                     "type": "warning",
                     "message": "Battery level getting low - 65%",
                     "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=30)),
+                    "resolved": False,
+                    "assignedTo": "staff_3"
+                }
+            }
+        },
+        "env_sensor_1": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "temperature": 22.5,
+                    "humidity": 45,
+                    "airQuality": 95,
+                    "lightLevel": 80,
+                    "noiseLevel": 35,
+                    "pressure": 1013.25,
+                    "co2Level": 400,
+                    "deviceStatus": "online",
+                    "batteryLevel": 88,
+                    "signalStrength": 92,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                },
+                format_datetime_for_firebase(current_time - timedelta(minutes=15)): {
+                    "temperature": 22.3,
+                    "humidity": 44,
+                    "airQuality": 94,
+                    "lightLevel": 82,
+                    "noiseLevel": 38,
+                    "pressure": 1013.15,
+                    "co2Level": 398,
+                    "deviceStatus": "online",
+                    "batteryLevel": 88,
+                    "signalStrength": 91,
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=15))
+                }
+            },
+            "deviceInfo": {
+                "type": "environmental_sensor",
+                "manufacturer": "EnviroTech Solutions",
+                "model": "ET-ENV-2024",
+                "roomId": "room_1",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=30)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=60)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=180))
+            },
+            "alerts": {}
+        },
+        "env_sensor_2": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "temperature": 23.0,
+                    "humidity": 50,
+                    "airQuality": 98,
+                    "lightLevel": 75,
+                    "noiseLevel": 30,
+                    "pressure": 1013.30,
+                    "co2Level": 380,
+                    "deviceStatus": "online",
+                    "batteryLevel": 92,
+                    "signalStrength": 95,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                },
+                format_datetime_for_firebase(current_time - timedelta(minutes=15)): {
+                    "temperature": 23.1,
+                    "humidity": 49,
+                    "airQuality": 97,
+                    "lightLevel": 78,
+                    "noiseLevel": 32,
+                    "pressure": 1013.20,
+                    "co2Level": 385,
+                    "deviceStatus": "online",
+                    "batteryLevel": 92,
+                    "signalStrength": 94,
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=15))
+                }
+            },
+            "deviceInfo": {
+                "type": "environmental_sensor",
+                "manufacturer": "EnviroTech Solutions",
+                "model": "ET-ENV-2024",
+                "roomId": "room_2",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=25)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=65)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=175))
+            },
+            "alerts": {}
+        },
+        "env_sensor_3": {
+            "vitals": {
+                format_datetime_for_firebase(current_time): {
+                    "temperature": 21.0,
+                    "humidity": 55,
+                    "airQuality": 96,
+                    "lightLevel": 85,
+                    "noiseLevel": 40,
+                    "pressure": 1013.10,
+                    "co2Level": 420,
+                    "deviceStatus": "online",
+                    "batteryLevel": 76,
+                    "signalStrength": 89,
+                    "timestamp": format_datetime_for_firebase(current_time)
+                },
+                format_datetime_for_firebase(current_time - timedelta(minutes=15)): {
+                    "temperature": 21.2,
+                    "humidity": 54,
+                    "airQuality": 95,
+                    "lightLevel": 87,
+                    "noiseLevel": 42,
+                    "pressure": 1013.05,
+                    "co2Level": 415,
+                    "deviceStatus": "online",
+                    "batteryLevel": 76,
+                    "signalStrength": 88,
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=15))
+                }
+            },
+            "deviceInfo": {
+                "type": "environmental_sensor",
+                "manufacturer": "EnviroTech Solutions",
+                "model": "ET-ENV-2024",
+                "roomId": "room_3",
+                "lastCalibrated": format_datetime_for_firebase(current_time - timedelta(days=20)),
+                "calibrationDue": format_datetime_for_firebase(current_time + timedelta(days=70)),
+                "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=170))
+            },
+            "alerts": {
+                "alert_9": {
+                    "type": "warning",
+                    "message": "CO2 levels slightly elevated - 420 ppm",
+                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=10)),
                     "resolved": False,
                     "assignedTo": "staff_3"
                 }

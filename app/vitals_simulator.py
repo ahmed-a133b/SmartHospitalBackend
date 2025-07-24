@@ -17,8 +17,10 @@ class VitalsSimulator:
         self.running = False
         self.simulation_threads = []
         self.monitors = {}  # Will store monitor-patient mappings
+        self.environmental_sensors = {}  # Will store environmental sensors by room
         self.patients = {}  # Will store patient data
         self.patient_vitals_cache = {}  # Cache for current vital values
+        self.environmental_cache = {}  # Cache for current environmental values
         
     def fetch_monitor_data(self) -> bool:
         """Fetch monitor data and their assigned patients from Firebase"""
@@ -27,49 +29,88 @@ class VitalsSimulator:
             monitors_data = iot_ref.get()
             
             if monitors_data:
-                logger.info(f"Successfully fetched {len(monitors_data)} monitors from database")
+                logger.info(f"Successfully fetched {len(monitors_data)} devices from database")
                 
-                # Store monitor-patient mappings and fetch patient data
-                for monitor_id, monitor_data in monitors_data.items():
+                # Process different types of devices
+                for device_id, device_data in monitors_data.items():
+                    device_info = device_data.get('deviceInfo', {})
+                    device_type = device_info.get('type', '')
+                    
                     # Get the latest vitals entry if it exists
-                    vitals = monitor_data.get('vitals', {})
+                    vitals = device_data.get('vitals', {})
                     latest_vitals = None
                     if vitals:
-                        # Get the latest timestamp's data
-                        latest_timestamp = max(vitals.keys())
-                        latest_vitals = vitals[latest_timestamp]
+                        # Check if vitals are organized by patient (new structure)
+                        if any(isinstance(v, dict) and not any(key in v for key in ['heartRate', 'humidity']) for v in vitals.values()):
+                            # Patient-organized structure: get latest from all patients
+                            all_vitals = []
+                            for patient_vitals in vitals.values():
+                                if isinstance(patient_vitals, dict):
+                                    for timestamp, vital_data in patient_vitals.items():
+                                        all_vitals.append((timestamp, vital_data))
+                            if all_vitals:
+                                # Sort and get latest
+                                latest_timestamp = max(all_vitals, key=lambda x: x[0])[0]
+                                latest_vitals = max(all_vitals, key=lambda x: x[0])[1]
+                        else:
+                            # Old structure: get latest timestamp's data
+                            latest_timestamp = max(vitals.keys())
+                            latest_vitals = vitals[latest_timestamp]
                     
-                    # Get patient ID from latest vitals or device info
-                    patient_id = None
-                    if latest_vitals and 'patientId' in latest_vitals:
-                        patient_id = latest_vitals['patientId']
-                    
-                    if patient_id:
-                        self.monitors[monitor_id] = {
-                            'patientId': patient_id,
-                            'deviceInfo': monitor_data.get('deviceInfo', {}),
-                            'lastVitals': latest_vitals
-                        }
+                    if device_type == 'vitals_monitor':
+                        # Handle patient vitals monitors
+                        patient_id = None
                         
-                        # Fetch patient data if we haven't already
-                        if patient_id not in self.patients:
-                            patient_ref = db.reference(f'patients/{patient_id}')
-                            patient_data = patient_ref.get()
-                            if patient_data:
-                                self.patients[patient_id] = self.convert_db_patient_to_simulation_format(patient_data)
-                                # Initialize vitals cache from last reading if available
-                                if latest_vitals:
-                                    self.patient_vitals_cache[patient_id] = self.convert_vitals_to_cache_format(latest_vitals)
-                                else:
-                                    self.patient_vitals_cache[patient_id] = self.get_initial_vitals_for_patient(patient_data)
+                        # Try to get patient ID from device info first (new structure)
+                        if 'currentPatientId' in device_info:
+                            patient_id = device_info['currentPatientId']
+                        # Fallback to checking latest vitals for backwards compatibility
+                        elif latest_vitals and 'patientId' in latest_vitals:
+                            patient_id = latest_vitals['patientId']
+                        
+                        if patient_id:
+                            self.monitors[device_id] = {
+                                'patientId': patient_id,
+                                'deviceInfo': device_info,
+                                'lastVitals': latest_vitals
+                            }
+                            
+                            # Fetch patient data if we haven't already
+                            if patient_id not in self.patients:
+                                patient_ref = db.reference(f'patients/{patient_id}')
+                                patient_data = patient_ref.get()
+                                if patient_data:
+                                    self.patients[patient_id] = self.convert_db_patient_to_simulation_format(patient_data)
+                                    # Initialize vitals cache from last reading if available
+                                    if latest_vitals:
+                                        self.patient_vitals_cache[patient_id] = self.convert_vitals_to_cache_format(latest_vitals)
+                                    else:
+                                        self.patient_vitals_cache[patient_id] = self.get_initial_vitals_for_patient(patient_data)
+                    
+                    elif device_type == 'environmental_sensor':
+                        # Handle environmental sensors
+                        room_id = device_info.get('roomId')
+                        if room_id:
+                            self.environmental_sensors[device_id] = {
+                                'roomId': room_id,
+                                'deviceInfo': device_info,
+                                'lastReading': latest_vitals
+                            }
+                            
+                            # Initialize environmental cache
+                            if latest_vitals:
+                                self.environmental_cache[device_id] = self.convert_environmental_to_cache_format(latest_vitals)
+                            else:
+                                self.environmental_cache[device_id] = self.get_initial_environmental_data(room_id)
                 
-                return bool(self.monitors)
+                logger.info(f"Found {len(self.monitors)} patient monitors and {len(self.environmental_sensors)} environmental sensors")
+                return bool(self.monitors) or bool(self.environmental_sensors)
             else:
-                logger.error("No monitors found in database")
+                logger.error("No devices found in database")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error fetching monitor data: {str(e)}")
+            logger.error(f"Error fetching device data: {str(e)}")
             return False
     
     def convert_db_patient_to_simulation_format(self, patient_data: Dict) -> Dict:
@@ -487,17 +528,187 @@ class VitalsSimulator:
             'signalStrength': 85 + random.randint(0, 14)
         }
     
+    def convert_environmental_to_cache_format(self, environmental_data: Dict) -> Dict:
+        """Convert environmental data from Firebase format to cache format"""
+        return {
+            'temperature': environmental_data.get('temperature', 22.0),
+            'humidity': environmental_data.get('humidity', 45),
+            'airQuality': environmental_data.get('airQuality', 95),
+            'lightLevel': environmental_data.get('lightLevel', 80),
+            'noiseLevel': environmental_data.get('noiseLevel', 35),
+            'pressure': environmental_data.get('pressure', 1013.25),
+            'co2Level': environmental_data.get('co2Level', 400)
+        }
+    
+    def get_initial_environmental_data(self, room_id: str) -> Dict:
+        """Get initial environmental data for a room"""
+        # Different room types have different baseline environmental conditions
+        room_baselines = {
+            'ICU': {
+                'temperature': 22.0,
+                'humidity': 45,
+                'airQuality': 95,
+                'lightLevel': 75,
+                'noiseLevel': 40,
+                'pressure': 1013.25,
+                'co2Level': 400
+            },
+            'isolation': {
+                'temperature': 23.0,
+                'humidity': 50,
+                'airQuality': 98,
+                'lightLevel': 70,
+                'noiseLevel': 30,
+                'pressure': 1013.30,
+                'co2Level': 380
+            },
+            'general': {
+                'temperature': 21.5,
+                'humidity': 55,
+                'airQuality': 92,
+                'lightLevel': 85,
+                'noiseLevel': 45,
+                'pressure': 1013.15,
+                'co2Level': 420
+            }
+        }
+        
+        # Try to get room type from room_id or use general as default
+        room_type = 'general'  # Default
+        if 'icu' in room_id.lower():
+            room_type = 'ICU'
+        elif 'isolation' in room_id.lower():
+            room_type = 'isolation'
+        
+        baseline = room_baselines.get(room_type, room_baselines['general'])
+        
+        # Add some initial variation
+        return {
+            'temperature': baseline['temperature'] + random.uniform(-1.0, 1.0),
+            'humidity': baseline['humidity'] + random.randint(-5, 5),
+            'airQuality': baseline['airQuality'] + random.randint(-3, 3),
+            'lightLevel': baseline['lightLevel'] + random.randint(-10, 10),
+            'noiseLevel': baseline['noiseLevel'] + random.randint(-5, 5),
+            'pressure': baseline['pressure'] + random.uniform(-0.5, 0.5),
+            'co2Level': baseline['co2Level'] + random.randint(-20, 20)
+        }
+    
+    def generate_environmental_data(self, device_id: str) -> Optional[Dict]:
+        """Generate realistic environmental data for a room sensor"""
+        try:
+            if device_id not in self.environmental_sensors:
+                return None
+            
+            sensor_info = self.environmental_sensors[device_id]
+            room_id = sensor_info['roomId']
+            
+            # Initialize cache if not exists
+            if device_id not in self.environmental_cache:
+                self.environmental_cache[device_id] = self.get_initial_environmental_data(room_id)
+            
+            current_env = self.environmental_cache[device_id]
+            
+            # Get current time for circadian effects
+            hour = datetime.now().hour
+            
+            # Generate new environmental values with realistic variations
+            env_data = dict(current_env)
+            
+            # Temperature variations based on time of day and HVAC cycles
+            temp_circadian = math.sin((hour - 6) * math.pi / 12) * 1.5  # Peak at 6 PM
+            env_data['temperature'] += temp_circadian + random.uniform(-0.3, 0.3)
+            
+            # Humidity varies inversely with temperature and has HVAC effects
+            humidity_change = random.uniform(-2, 2)
+            if env_data['temperature'] > current_env['temperature']:
+                humidity_change -= 1  # Temperature up, humidity tends down
+            env_data['humidity'] += humidity_change
+            
+            # Air quality affected by occupancy and ventilation
+            # Assume lower quality during busy hours (8 AM - 8 PM)
+            if 8 <= hour <= 20:
+                env_data['airQuality'] += random.uniform(-2, 1)
+            else:
+                env_data['airQuality'] += random.uniform(-0.5, 2)
+            
+            # Light level varies with time of day
+            if 6 <= hour <= 22:  # Daytime/evening
+                target_light = 80 + (22 - abs(hour - 14)) * 2  # Peak at 2 PM
+            else:  # Nighttime
+                target_light = 20
+            
+            light_diff = target_light - env_data['lightLevel']
+            env_data['lightLevel'] += light_diff * 0.3 + random.uniform(-5, 5)
+            
+            # Noise level varies with hospital activity
+            if 6 <= hour <= 22:  # Active hours
+                env_data['noiseLevel'] += random.uniform(-3, 8)
+            else:  # Quiet hours
+                env_data['noiseLevel'] += random.uniform(-5, 2)
+            
+            # Atmospheric pressure (minor variations)
+            env_data['pressure'] += random.uniform(-0.1, 0.1)
+            
+            # CO2 level affected by occupancy and ventilation
+            if 8 <= hour <= 20:  # Busier times
+                env_data['co2Level'] += random.uniform(-5, 15)
+            else:
+                env_data['co2Level'] += random.uniform(-10, 5)
+            
+            # Apply realistic bounds
+            env_data['temperature'] = max(18, min(28, env_data['temperature']))
+            env_data['humidity'] = max(30, min(70, env_data['humidity']))
+            env_data['airQuality'] = max(70, min(100, env_data['airQuality']))
+            env_data['lightLevel'] = max(0, min(100, env_data['lightLevel']))
+            env_data['noiseLevel'] = max(20, min(80, env_data['noiseLevel']))
+            env_data['pressure'] = max(1010, min(1020, env_data['pressure']))
+            env_data['co2Level'] = max(350, min(800, env_data['co2Level']))
+            
+            # Update cache
+            self.environmental_cache[device_id] = env_data
+            
+            return {
+                'temperature': round(env_data['temperature'] * 10) / 10,
+                'humidity': round(env_data['humidity']),
+                'airQuality': round(env_data['airQuality']),
+                'lightLevel': round(env_data['lightLevel']),
+                'noiseLevel': round(env_data['noiseLevel']),
+                'pressure': round(env_data['pressure'] * 100) / 100,
+                'co2Level': round(env_data['co2Level']),
+                'deviceStatus': 'online',
+                'batteryLevel': 80 + random.randint(0, 19),
+                'signalStrength': 85 + random.randint(0, 14)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating environmental data for {device_id}: {str(e)}")
+            return None
+    
     def post_vitals_to_db(self, device_id: str, vitals_data: Dict) -> bool:
-        """Post vitals data to Firebase"""
+        """Post vitals data to Firebase with patient-based organization"""
         try:
             # Get current timestamp
             timestamp = self.sanitize_timestamp(datetime.now().isoformat())
             
-            # Update vitals in Firebase
-            vitals_ref = db.reference(f'iotData/{device_id}/vitals')
-            vitals_ref.child(timestamp).set(vitals_data)
+            # Get patient ID from vitals data
+            patient_id = vitals_data.get('patientId')
+            if not patient_id:
+                logger.error(f"No patient ID found in vitals data for device {device_id}")
+                return False
             
-            logger.info(f"✓ Successfully posted vitals for {device_id}")
+            # Verify that this patient is actually assigned to the device
+            device_ref = db.reference(f'iotData/{device_id}/deviceInfo')
+            device_info = device_ref.get()
+            
+            if not device_info or device_info.get('currentPatientId') != patient_id:
+                logger.warning(f"Patient {patient_id} is not currently assigned to device {device_id}. Skipping vitals storage.")
+                return False
+            
+            # Store vitals using the new structure: vitals[patient_id][timestamp] = vital_record
+            vitals_ref = db.reference(f'iotData/{device_id}/vitals/{patient_id}/{timestamp}')
+            vitals_ref.set(vitals_data)
+            
+            logger.info(f"✓ Successfully posted vitals for {device_id} (Patient: {patient_id})")
             return True
                 
         except Exception as e:
@@ -532,22 +743,52 @@ class VitalsSimulator:
                 logger.error(f"Error in simulation for {patient_id}: {str(e)}")
                 time.sleep(interval)
 
+    def simulate_environmental_sensor(self, device_id: str, interval: int = 15):
+        """Simulate a single environmental sensor"""
+        sensor_info = self.environmental_sensors[device_id]
+        room_id = sensor_info['roomId']
+        logger.info(f"Starting environmental simulation for {device_id} in {room_id}")
+        
+        while self.running:
+            try:
+                # Generate environmental data
+                env_data = self.generate_environmental_data(device_id)
+                
+                if env_data:
+                    # Post to Firebase
+                    success = self.post_vitals_to_db(device_id, env_data)
+                    
+                    if success:
+                        logger.info(f"Environmental {device_id} - Temp: {env_data['temperature']}°C, "
+                                  f"Humidity: {env_data['humidity']}%, "
+                                  f"Air Quality: {env_data['airQuality']}, "
+                                  f"CO2: {env_data['co2Level']} ppm")
+                else:
+                    logger.warning(f"Failed to generate environmental data for {device_id}")
+                
+                # Wait for next interval (environmental sensors update less frequently)
+                time.sleep(interval)
+                
+            except Exception as e:
+                logger.error(f"Error in environmental simulation for {device_id}: {str(e)}")
+                time.sleep(interval)
+
     def start_simulation(self, interval: int = 5):
-        """Start simulation for all active monitors"""
-        logger.info("Starting vitals simulation...")
+        """Start simulation for all active monitors and environmental sensors"""
+        logger.info("Starting vitals and environmental simulation...")
         
         # First, fetch monitor and patient data
         if not self.fetch_monitor_data():
-            logger.error("Failed to fetch monitor data. Cannot start simulation.")
+            logger.error("Failed to fetch device data. Cannot start simulation.")
             return False
         
-        if not self.monitors:
-            logger.error("No active monitors found. Cannot start simulation.")
+        if not self.monitors and not self.environmental_sensors:
+            logger.error("No active devices found. Cannot start simulation.")
             return False
         
         self.running = True
         
-        # Create a thread for each active monitor
+        # Create threads for patient monitors
         for monitor_id, monitor_info in self.monitors.items():
             patient_id = monitor_info['patientId']
             if patient_id in self.patients:  # Only simulate if we have patient data
@@ -562,7 +803,19 @@ class VitalsSimulator:
             else:
                 logger.warning(f"Skipping monitor {monitor_id} - no patient data available")
         
-        logger.info(f"Started {len(self.simulation_threads)} monitor simulations")
+        # Create threads for environmental sensors
+        for sensor_id, sensor_info in self.environmental_sensors.items():
+            room_id = sensor_info['roomId']
+            thread = threading.Thread(
+                target=self.simulate_environmental_sensor,
+                args=(sensor_id, interval * 3),  # Environmental sensors update less frequently
+                daemon=True
+            )
+            thread.start()
+            self.simulation_threads.append(thread)
+            logger.info(f"Started environmental simulation for sensor {sensor_id} (Room: {room_id})")
+        
+        logger.info(f"Started {len(self.simulation_threads)} simulations ({len(self.monitors)} monitors, {len(self.environmental_sensors)} environmental sensors)")
         return True
 
     def stop_simulation(self):

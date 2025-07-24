@@ -99,6 +99,104 @@ def create_sample_iot_devices():
         "timestamp": current_time.isoformat()
     }
     
+    # Add environmental sensors for each room
+    timestamp = current_time.isoformat().replace(':', '-').replace('.', '-')
+    
+    # Environmental sensor for room_1
+    devices["env_sensor_1"] = {
+        "deviceInfo": {
+            "type": "environmental_sensor",
+            "manufacturer": "EnviroTech Solutions",
+            "model": "ET-ENV-2024",
+            "roomId": "room_1",
+            "lastCalibrated": (current_time - timedelta(days=30)).isoformat(),
+            "calibrationDue": (current_time + timedelta(days=60)).isoformat(),
+            "maintenanceSchedule": (current_time + timedelta(days=180)).isoformat()
+        },
+        "vitals": {
+            timestamp: {
+                "temperature": 22.5,
+                "humidity": 45,
+                "airQuality": 95,
+                "lightLevel": 80,
+                "noiseLevel": 35,
+                "pressure": 1013.25,
+                "co2Level": 400,
+                "deviceStatus": "online",
+                "batteryLevel": 88,
+                "signalStrength": 92,
+                "timestamp": current_time.isoformat()
+            }
+        },
+        "alerts": {}
+    }
+    
+    # Environmental sensor for room_2
+    devices["env_sensor_2"] = {
+        "deviceInfo": {
+            "type": "environmental_sensor",
+            "manufacturer": "EnviroTech Solutions",
+            "model": "ET-ENV-2024",
+            "roomId": "room_2",
+            "lastCalibrated": (current_time - timedelta(days=25)).isoformat(),
+            "calibrationDue": (current_time + timedelta(days=65)).isoformat(),
+            "maintenanceSchedule": (current_time + timedelta(days=175)).isoformat()
+        },
+        "vitals": {
+            timestamp: {
+                "temperature": 23.0,
+                "humidity": 50,
+                "airQuality": 98,
+                "lightLevel": 75,
+                "noiseLevel": 30,
+                "pressure": 1013.30,
+                "co2Level": 380,
+                "deviceStatus": "online",
+                "batteryLevel": 92,
+                "signalStrength": 95,
+                "timestamp": current_time.isoformat()
+            }
+        },
+        "alerts": {}
+    }
+    
+    # Environmental sensor for room_3
+    devices["env_sensor_3"] = {
+        "deviceInfo": {
+            "type": "environmental_sensor",
+            "manufacturer": "EnviroTech Solutions",
+            "model": "ET-ENV-2024",
+            "roomId": "room_3",
+            "lastCalibrated": (current_time - timedelta(days=20)).isoformat(),
+            "calibrationDue": (current_time + timedelta(days=70)).isoformat(),
+            "maintenanceSchedule": (current_time + timedelta(days=170)).isoformat()
+        },
+        "vitals": {
+            timestamp: {
+                "temperature": 21.0,
+                "humidity": 55,
+                "airQuality": 96,
+                "lightLevel": 85,
+                "noiseLevel": 40,
+                "pressure": 1013.10,
+                "co2Level": 420,
+                "deviceStatus": "online",
+                "batteryLevel": 76,
+                "signalStrength": 89,
+                "timestamp": current_time.isoformat()
+            }
+        },
+        "alerts": {
+            (current_time - timedelta(minutes=10)).isoformat().replace(':', '-').replace('.', '-'): {
+                "type": "warning",
+                "message": "CO2 levels slightly elevated - 420 ppm",
+                "timestamp": (current_time - timedelta(minutes=10)).isoformat(),
+                "resolved": False,
+                "assignedTo": "staff_3"
+            }
+        }
+    }
+    
     # Add sample alert for monitor_2
     alert_time = (current_time - timedelta(minutes=30)).isoformat().replace(':', '-').replace('.', '-')
     devices["monitor_2"]["alerts"][alert_time] = {

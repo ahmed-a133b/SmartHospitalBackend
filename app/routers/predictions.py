@@ -17,7 +17,7 @@ def format_datetime_for_firebase(dt):
     return dt.strftime("%Y-%m-%d_%H-%M-%S")
 
 def get_latest_vitals(patient_id: str) -> Optional[dict]:
-    """Fetch latest vitals for a patient from IoT monitors"""
+    """Fetch latest vitals for a patient from IoT monitors using new schema"""
     try:
         # Get all IoT devices
         iot_ref = get_ref('iotData')
@@ -25,22 +25,31 @@ def get_latest_vitals(patient_id: str) -> Optional[dict]:
         if not monitors:
             return None
         
-        # Find monitor assigned to patient
-        patient_monitor = None
-        patient_vitals = None
+        # Find monitor assigned to patient and get latest vitals
+        latest_vitals = None
         latest_timestamp = None
         
         for monitor_id, data in monitors.items():
-            if 'vitals' in data:
-                # Get the latest vitals entry
-                vitals_data = data['vitals']
-                for timestamp, vitals in vitals_data.items():
-                    if vitals.get('patientId') == patient_id:
+            device_info = data.get('deviceInfo', {})
+            
+            # Check if this is a vitals monitor
+            if device_info.get('type') != 'vitals_monitor':
+                continue
+                
+            # Check if patient is currently assigned to this monitor
+            current_patient_id = device_info.get('currentPatientId')
+            if current_patient_id == patient_id:
+                # Get vitals for this patient using new structure: vitals/{patient_id}/{timestamp}
+                vitals_data = data.get('vitals', {}).get(patient_id, {})
+                
+                if vitals_data:
+                    # Find the latest timestamp
+                    for timestamp, vitals in vitals_data.items():
                         if latest_timestamp is None or timestamp > latest_timestamp:
                             latest_timestamp = timestamp
-                            patient_vitals = vitals
+                            latest_vitals = vitals
         
-        return patient_vitals
+        return latest_vitals
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching vitals: {str(e)}")
 
@@ -157,7 +166,7 @@ def create_alert(patient_id: str, risk_level: str, risk_score: int, vitals: dict
         return None
 
 def get_patient_monitor(patient_id: str) -> tuple[Optional[str], Optional[dict]]:
-    """Find the monitor assigned to a patient and get its latest vitals"""
+    """Find the monitor assigned to a patient and get its latest vitals using new schema"""
     try:
         iot_ref = get_ref('iotData')
         monitors = iot_ref.get()
@@ -165,22 +174,30 @@ def get_patient_monitor(patient_id: str) -> tuple[Optional[str], Optional[dict]]
             return None, None
         
         for monitor_id, data in monitors.items():
-            if 'vitals' not in data:
+            device_info = data.get('deviceInfo', {})
+            
+            # Check if this is a vitals monitor
+            if device_info.get('type') != 'vitals_monitor':
                 continue
                 
-            # Get the latest vitals entry
-            vitals_data = data['vitals']
-            latest_timestamp = None
-            latest_vitals = None
-            
-            for timestamp, vitals in vitals_data.items():
-                if vitals.get('patientId') == patient_id:
-                    if latest_timestamp is None or timestamp > latest_timestamp:
-                        latest_timestamp = timestamp
-                        latest_vitals = vitals
-                        
-            if latest_vitals:
-                return monitor_id, latest_vitals
+            # Check if patient is currently assigned to this monitor
+            current_patient_id = device_info.get('currentPatientId')
+            if current_patient_id == patient_id:
+                # Get vitals for this patient using new structure: vitals/{patient_id}/{timestamp}
+                vitals_data = data.get('vitals', {}).get(patient_id, {})
+                
+                if vitals_data:
+                    # Find the latest timestamp and vitals
+                    latest_timestamp = None
+                    latest_vitals = None
+                    
+                    for timestamp, vitals in vitals_data.items():
+                        if latest_timestamp is None or timestamp > latest_timestamp:
+                            latest_timestamp = timestamp
+                            latest_vitals = vitals
+                    
+                    if latest_vitals:
+                        return monitor_id, latest_vitals
                 
         return None, None
     except Exception as e:
@@ -305,3 +322,84 @@ def predict_risk(patient_id: str):
     except Exception as e:
         # logger.error(f"Error in risk prediction: {str(e)}") # logger is not defined
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+@router.get("/test-vitals/{patient_id}")
+def test_vitals_retrieval(patient_id: str):
+    """Test endpoint to verify vitals retrieval with new schema"""
+    try:
+        # Test the updated vitals retrieval functions
+        monitor_id, latest_vitals = get_patient_monitor(patient_id)
+        
+        if not monitor_id or not latest_vitals:
+            return {
+                "patient_id": patient_id,
+                "monitor_found": False,
+                "vitals_found": False,
+                "message": "No monitor assigned to patient or no vitals available"
+            }
+        
+        # Also test the alternative function
+        alt_vitals = get_latest_vitals(patient_id)
+        
+        return {
+            "patient_id": patient_id,
+            "monitor_found": True,
+            "monitor_id": monitor_id,
+            "vitals_found": True,
+            "latest_vitals": latest_vitals,
+            "alt_vitals_match": alt_vitals == latest_vitals,
+            "vitals_structure": {
+                "heartRate": latest_vitals.get('heartRate'),
+                "bloodPressure": latest_vitals.get('bloodPressure'),
+                "oxygenLevel": latest_vitals.get('oxygenLevel'),
+                "temperature": latest_vitals.get('temperature'),
+                "respiratoryRate": latest_vitals.get('respiratoryRate'),
+                "glucose": latest_vitals.get('glucose'),
+                "timestamp": latest_vitals.get('timestamp'),
+                "patientId": latest_vitals.get('patientId')
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "patient_id": patient_id,
+            "error": str(e),
+            "monitor_found": False,
+            "vitals_found": False
+        }
+
+@router.get("/debug/monitors")
+def debug_monitor_structure():
+    """Debug endpoint to show the current monitor data structure"""
+    try:
+        iot_ref = get_ref('iotData')
+        monitors = iot_ref.get()
+        
+        if not monitors:
+            return {"message": "No monitors found"}
+        
+        debug_info = {}
+        
+        for monitor_id, data in monitors.items():
+            device_info = data.get('deviceInfo', {})
+            vitals_structure = data.get('vitals', {})
+            
+            debug_info[monitor_id] = {
+                "device_type": device_info.get('type'),
+                "current_patient": device_info.get('currentPatientId'),
+                "room_id": device_info.get('roomId'),
+                "bed_id": device_info.get('bedId'),
+                "vitals_patients": list(vitals_structure.keys()) if vitals_structure else [],
+                "vitals_count_by_patient": {
+                    patient_id: len(patient_vitals) 
+                    for patient_id, patient_vitals in vitals_structure.items()
+                } if vitals_structure else {}
+            }
+        
+        return {
+            "total_monitors": len(monitors),
+            "monitors": debug_info
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}

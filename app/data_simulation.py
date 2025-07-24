@@ -103,8 +103,8 @@ class HospitalDataSimulator:
                 'timestamp': format_datetime_for_firebase(current_time)
             }
             
-            # Update vitals in Firebase
-            monitor_ref = db.reference(f'iotData/{monitor["id"]}/vitals')
+            # Update vitals in Firebase using correct structure: vitals/{patient_id}/{timestamp}
+            monitor_ref = db.reference(f'iotData/{monitor["id"]}/vitals/{monitor["patientId"]}')
             monitor_ref.child(format_datetime_for_firebase(current_time)).set(vitals)
             logger.info(f"Updated vitals for monitor {monitor['id']}")
             
