@@ -84,9 +84,9 @@ async def start_simulation(background_tasks: BackgroundTasks):
                 )
             )
         
-        # Get the path to the enhanced simulation script
+        # Get the path to the simulation script
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        script_path = os.path.join(current_dir, "enhanced_data_simulation.py")
+        script_path = os.path.join(current_dir, "data_simulation_v2.py")
         
         if not os.path.exists(script_path):
             raise HTTPException(

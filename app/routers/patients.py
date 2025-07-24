@@ -158,7 +158,7 @@ async def delete_patient(patient_id: str):
         logger.error(f"Error deleting patient {patient_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{patient_id}/vitals")
+# @router.get("/{patient_id}/vitals")
 async def get_patient_vitals(
     patient_id: str,
     start_time: Optional[str] = None,

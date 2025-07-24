@@ -56,17 +56,15 @@ class AnomalyType(Enum):
 
 @dataclass
 class Alert:
-    id: str
-    timestamp: str
-    deviceId: str
-    patientId: str
-    anomalyType: AnomalyType
-    alertLevel: AlertLevel
     message: str
-    vitalValues: Dict
+    monitorId: str
+    patientId: str
+    resolved: bool
+    timestamp: str
+    type: str  # "warning", "critical", "info"
+    vitals: Dict
     environmentalValues: Optional[Dict] = None
     recommendations: List[str] = None
-    autoResolved: bool = False
 
 @dataclass
 class PatientProfile:
@@ -476,27 +474,47 @@ class EnhancedHospitalDataSimulator:
         return env_data
     
     def create_alert(self, device_id: str, patient_id: str, anomaly_type: AnomalyType, 
-                    alert_level: AlertLevel, vitals: Dict, env_data: Optional[Dict] = None) -> Alert:
+                    alert_level: AlertLevel, vitals: Dict, env_data: Optional[Dict] = None) -> Tuple[Alert, str]:
         """Create an alert for an anomaly"""
-        alert_id = f"alert_{int(time.time())}_{device_id}"
+        current_time = datetime.now()
+        timestamp = format_datetime_for_firebase(current_time)
         
         # Generate appropriate message and recommendations
         message, recommendations = self.get_alert_message_and_recommendations(anomaly_type, vitals, env_data)
         
+        # Convert alert level to type format matching your schema
+        alert_type_map = {
+            AlertLevel.LOW: "info",
+            AlertLevel.MEDIUM: "warning", 
+            AlertLevel.HIGH: "warning",
+            AlertLevel.CRITICAL: "critical"
+        }
+        
+        # Clean vitals data to match your format (remove extra fields)
+        clean_vitals = {
+            'heartRate': vitals.get('heartRate'),
+            'oxygenLevel': vitals.get('oxygenLevel'),
+            'temperature': vitals.get('temperature'),
+            'respiratoryRate': vitals.get('respiratoryRate'),
+            'bloodPressure': vitals.get('bloodPressure', {})
+        }
+        
+        # Remove None values
+        clean_vitals = {k: v for k, v in clean_vitals.items() if v is not None}
+        
         alert = Alert(
-            id=alert_id,
-            timestamp=format_datetime_for_firebase(datetime.now()),
-            deviceId=device_id,
-            patientId=patient_id,
-            anomalyType=anomaly_type,
-            alertLevel=alert_level,
             message=message,
-            vitalValues=vitals,
+            monitorId=device_id,
+            patientId=patient_id,
+            resolved=False,
+            timestamp=timestamp,
+            type=alert_type_map.get(alert_level, "warning"),
+            vitals=clean_vitals,
             environmentalValues=env_data,
             recommendations=recommendations
         )
         
-        return alert
+        return alert, timestamp
     
     def get_alert_message_and_recommendations(self, anomaly_type: AnomalyType, vitals: Dict, env_data: Optional[Dict]) -> Tuple[str, List[str]]:
         """Generate alert message and recommendations based on anomaly type"""
@@ -533,17 +551,17 @@ class EnhancedHospitalDataSimulator:
         
         return message, recommendations
     
-    def save_alert_to_firebase(self, alert: Alert):
-        """Save alert to Firebase"""
+    def save_alert_to_firebase(self, alert: Alert, timestamp: str):
+        """Save alert to Firebase using timestamp as key"""
         try:
             alerts_ref = db.reference('alerts')
-            # Convert the alert to dict and handle enum serialization
+            # Convert the alert to dict - no need to handle enums anymore
             alert_dict = asdict(alert)
-            # Convert enum values to strings for JSON serialization
-            alert_dict['anomalyType'] = alert.anomalyType.value
-            alert_dict['alertLevel'] = alert.alertLevel.value
-            alerts_ref.child(alert.id).set(alert_dict)
-            logger.info(f"Alert saved: {alert.alertLevel.value} - {alert.message}")
+            # Remove None values to keep the JSON clean
+            alert_dict = {k: v for k, v in alert_dict.items() if v is not None}
+            # Store using timestamp as key
+            alerts_ref.child(timestamp).set(alert_dict)
+            logger.info(f"Alert saved with timestamp {timestamp}: {alert.type} - {alert.message}")
         except Exception as e:
             logger.error(f"Error saving alert: {str(e)}")
     
@@ -563,8 +581,8 @@ class EnhancedHospitalDataSimulator:
                 )
                 
                 # Create and save alert
-                alert = self.create_alert(monitor_id, patient_profile.patientId, anomaly_type, alert_level, vitals)
-                self.save_alert_to_firebase(alert)
+                alert, alert_timestamp = self.create_alert(monitor_id, patient_profile.patientId, anomaly_type, alert_level, vitals)
+                self.save_alert_to_firebase(alert, alert_timestamp)
                 
                 logger.warning(f"ANOMALY: {anomaly_type.value} for patient {patient_profile.patientId} - Alert Level: {alert_level.value}")
             else:
@@ -610,15 +628,25 @@ class EnhancedHospitalDataSimulator:
                 env_data, alert_level = self.hazard_generator.generate_hazard_environmental_data(hazard_type, env_data)
                 
                 # Create environmental alert
+                current_time = datetime.now()
+                env_timestamp = format_datetime_for_firebase(current_time)
+                
+                # Convert alert level to type format
+                alert_type_map = {
+                    AlertLevel.LOW: "info",
+                    AlertLevel.MEDIUM: "warning", 
+                    AlertLevel.HIGH: "warning",
+                    AlertLevel.CRITICAL: "critical"
+                }
+                
                 alert = Alert(
-                    id=f"env_alert_{int(time.time())}_{sensor_id}",
-                    timestamp=format_datetime_for_firebase(current_time),
-                    deviceId=sensor_id,
-                    patientId="N/A",
-                    anomalyType=AnomalyType.ENVIRONMENTAL_HAZARD,
-                    alertLevel=alert_level,
                     message=f"Environmental hazard: {hazard_type} in room {sensor_info.get('roomId', 'unknown')}",
-                    vitalValues={},
+                    monitorId=sensor_id,
+                    patientId="N/A",
+                    resolved=False,
+                    timestamp=env_timestamp,
+                    type=alert_type_map.get(alert_level, "warning"),
+                    vitals={},  # No vitals for environmental alerts
                     environmentalValues=env_data,
                     recommendations=[
                         "Check room environmental controls",
@@ -628,7 +656,7 @@ class EnhancedHospitalDataSimulator:
                     ]
                 )
                 
-                self.save_alert_to_firebase(alert)
+                self.save_alert_to_firebase(alert, env_timestamp)
                 logger.warning(f"ENVIRONMENTAL HAZARD: {hazard_type} in room {sensor_info.get('roomId')}")
             
             # Add device status fields
