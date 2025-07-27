@@ -389,51 +389,6 @@ def predict_risk(patient_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-@router.get("/test-vitals/{patient_id}")
-def test_vitals_retrieval(patient_id: str):
-    """Test endpoint to verify vitals retrieval with new schema"""
-    try:
-        # Test the updated vitals retrieval functions
-        monitor_id, latest_vitals = get_patient_monitor(patient_id)
-        
-        if not monitor_id or not latest_vitals:
-            return {
-                "patient_id": patient_id,
-                "monitor_found": False,
-                "vitals_found": False,
-                "message": "No monitor assigned to patient or no vitals available"
-            }
-        
-        # Also test the alternative function
-        alt_vitals = get_latest_vitals(patient_id)
-        
-        return {
-            "patient_id": patient_id,
-            "monitor_found": True,
-            "monitor_id": monitor_id,
-            "vitals_found": True,
-            "latest_vitals": latest_vitals,
-            "alt_vitals_match": alt_vitals == latest_vitals,
-            "vitals_structure": {
-                "heartRate": latest_vitals.get('heartRate'),
-                "bloodPressure": latest_vitals.get('bloodPressure'),
-                "oxygenLevel": latest_vitals.get('oxygenLevel'),
-                "temperature": latest_vitals.get('temperature'),
-                "respiratoryRate": latest_vitals.get('respiratoryRate'),
-                "glucose": latest_vitals.get('glucose'),
-                "timestamp": latest_vitals.get('timestamp'),
-                "patientId": latest_vitals.get('patientId')
-            }
-        }
-        
-    except Exception as e:
-        return {
-            "patient_id": patient_id,
-            "error": str(e),
-            "monitor_found": False,
-            "vitals_found": False
-        }
-
 @router.get("/debug/monitors")
 def debug_monitor_structure():
     """Debug endpoint to show the current monitor data structure"""

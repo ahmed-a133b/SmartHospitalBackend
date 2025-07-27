@@ -13,12 +13,39 @@ from app.firebase_config import get_ref
 router = APIRouter(prefix="/anomalies", tags=["Anomaly Detection"])
 logger = logging.getLogger(__name__)
 
-def sanitize_timestamp(timestamp):
-        # Convert ISO timestamp to a Firebase-safe string
-        # Replace colons, periods, and other invalid characters
-        sanitized = re.sub(r'[.:]', '-', timestamp)
-        # Remove any other invalid characters for Firebase paths
-        sanitized = re.sub(r'[#\$\[\]]', '', sanitized)
+# def sanitize_timestamp(timestamp):
+#         # Convert ISO timestamp to a Firebase-safe string
+#         # Replace colons, periods, and other invalid characters
+#         sanitized = re.sub(r'[.:]', '-', timestamp)
+#         # Remove any other invalid characters for Firebase paths
+#         sanitized = re.sub(r'[#\$\[\]]', '', sanitized)
+#         return sanitized
+
+def format_datetime_for_firebase(dt):
+    """Format datetime in a Firebase-safe format (no colons or special chars)"""
+    return dt.strftime("%Y-%m-%d_%H-%M-%S")
+
+def format_timestamp_string_for_firebase(timestamp_str):
+    """Format ISO timestamp string to Firebase-safe format"""
+    try:
+        # Handle different ISO formats
+        if isinstance(timestamp_str, str):
+            # Remove timezone info and parse
+            clean_timestamp = timestamp_str.replace('Z', '').replace('+00:00', '')
+            if 'T' in clean_timestamp:
+                dt = datetime.fromisoformat(clean_timestamp)
+            else:
+                # Try to parse as standard datetime string
+                dt = datetime.strptime(clean_timestamp, "%Y-%m-%d %H:%M:%S")
+            return format_datetime_for_firebase(dt)
+        else:
+            # If it's already a datetime object
+            return format_datetime_for_firebase(timestamp_str)
+    except Exception as e:
+        logger.warning(f"Could not parse timestamp {timestamp_str}, using sanitized version: {e}")
+        # Fallback: sanitize the string directly
+        sanitized = re.sub(r'[.:]', '-', str(timestamp_str))
+        sanitized = re.sub(r'[#\$\[\]TZ+]', '', sanitized)
         return sanitized
 
 # Load the trained anomaly model
@@ -192,8 +219,8 @@ def save_anomaly_log(anomaly_result: Dict):
         device_id = anomaly_result["device_id"]
         timestamp = anomaly_result["timestamp"]
         
-        # Sanitize timestamp for Firebase
-        safe_timestamp = timestamp.replace(':', '-').replace('.', '-')
+        # Sanitize timestamp for Firebase (handle string timestamp)
+        safe_timestamp = format_timestamp_string_for_firebase(timestamp)
         
         # Save to anomaly logs
         anomaly_ref = get_ref(f"anomalies/{device_id}/{safe_timestamp}")
