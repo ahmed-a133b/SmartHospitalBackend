@@ -13,3 +13,6 @@ scipy                          # For statistical functions
 matplotlib                     # For plotting (optional, for debugging)
 seaborn                        # For advanced plotting (optional)
 psutil                         # For system utilities
+bcrypt                         # For password hashing
+python-jose[cryptography]      # For JWT token handling
+passlib[bcrypt]                # For password hashing utilities
