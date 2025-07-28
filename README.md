@@ -218,6 +218,7 @@ The API is configured to allow requests from:
 - `http://localhost:5173` (Vite dev server)
 - `http://localhost:3000` (React dev server)
 - `http://localhost:4173` (Vite preview)
+- `https://smart-hospital-frontend-nine.vercel.app` (Vercel Deployment)
 
 ## 🧪 Data Simulation
 
