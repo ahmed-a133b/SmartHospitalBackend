@@ -15,6 +15,7 @@ app.add_middleware(
         "http://localhost:3000",  # React dev server (if needed)
         "http://127.0.0.1:5173",  # Alternative Vite URL
         "http://localhost:4173",  # Vite preview
+        "https://smart-hospital-frontend-nine.vercel.app"  # Vercel deployment
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods including OPTIONS
