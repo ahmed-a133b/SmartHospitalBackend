@@ -70,9 +70,10 @@ def load_anomaly_model():
 # Load model on startup
 anomaly_model_data = load_anomaly_model()
 
-def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
+def detect_anomaly_with_model(sensor_data: Dict, device_id: str, environmental_data: Optional[Dict] = None) -> Dict:
     """
     Detect anomalies using the trained Isolation Forest model
+    Includes environmental data if provided
     """
     timestamp = datetime.now().isoformat()
     
@@ -86,7 +87,8 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
         "severity_score": 0.0,
         "anomaly_type": [],
         "details": {},
-        "confidence": 0.0
+        "confidence": 0.0,
+        "environmental_included": environmental_data is not None
     }
     
     if anomaly_model_data is None:
@@ -101,11 +103,31 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str) -> Dict:
         feature_names = anomaly_model_data['feature_names']
         
         logger.info(f"Processing anomaly detection for device {device_id} with features: {list(sensor_data.keys())}")
+        if environmental_data:
+            logger.info(f"Including environmental data: {list(environmental_data.keys())}")
+        
+        # Combine sensor data and environmental data
+        combined_data = sensor_data.copy()
+        if environmental_data:
+            # Add environmental data with appropriate field mapping
+            env_mapping = {
+                'temperature': 'env_temperature',
+                'humidity': 'env_humidity', 
+                'airQuality': 'env_air_quality',
+                'lightLevel': 'env_light_level',
+                'noiseLevel': 'env_noise_level',
+                'pressure': 'env_pressure',
+                'co2Level': 'env_co2_level'
+            }
+            
+            for env_key, sensor_key in env_mapping.items():
+                if env_key in environmental_data:
+                    combined_data[sensor_key] = environmental_data[env_key]
         
         # Prepare features in the same order as training
         features = []
         for feature_name in feature_names:
-            value = sensor_data.get(feature_name, 0)
+            value = combined_data.get(feature_name, 0)
             # Ensure value is a Python float, not numpy type
             features.append(float(value) if value is not None else 0.0)
         
@@ -284,9 +306,10 @@ def get_model_status():
     }
 
 @router.get("/detect/{monitor_id}")
-async def detect_anomaly(monitor_id: str, background_tasks: BackgroundTasks):
+async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, background_tasks: BackgroundTasks = None):
     """
     Detect anomalies for a specific monitor by getting its latest vitals
+    Optionally include environmental sensor data from the same room
     """
     try:
         # Get device data first to check if it exists and has a patient assigned
@@ -313,10 +336,32 @@ async def detect_anomaly(monitor_id: str, background_tasks: BackgroundTasks):
         latest_timestamp = sorted(patient_vitals.keys())[-1]
         latest_vitals = patient_vitals[latest_timestamp]
         
-        # Perform anomaly detection
+        # Get environmental data if sensor ID is provided
+        env_data = None
+        if env_sensor_id:
+            try:
+                env_ref = get_ref(f"iotData/{env_sensor_id}")
+                env_device_data = env_ref.get()
+                
+                if env_device_data and env_device_data.get("deviceInfo", {}).get("type") == "environmental_sensor":
+                    env_vitals = env_device_data.get("vitals", {})
+                    if env_vitals:
+                        # Get the most recent environmental reading
+                        latest_env_timestamp = sorted(env_vitals.keys())[-1]
+                        env_data = env_vitals[latest_env_timestamp]
+                        logger.info(f"Including environmental data from sensor {env_sensor_id} for anomaly detection")
+                    else:
+                        logger.warning(f"No environmental data found for sensor {env_sensor_id}")
+                else:
+                    logger.warning(f"Environmental sensor {env_sensor_id} not found or invalid type")
+            except Exception as e:
+                logger.error(f"Error retrieving environmental data from sensor {env_sensor_id}: {e}")
+        
+        # Perform anomaly detection with optional environmental data
         anomaly_result = detect_anomaly_with_model(
             sensor_data=latest_vitals,
-            device_id=monitor_id
+            device_id=monitor_id,
+            environmental_data=env_data
         )
         
         # Add patient context to the result

@@ -576,7 +576,7 @@ def generate_sample_data():
                     "humidity": 49,
                     "airQuality": 97,
                     "lightLevel": 78,
-                    "noiseLevel": 32,
+                   
                     "pressure": 1013.20,
                     "co2Level": 385,
                     "deviceStatus": "online",
@@ -635,13 +635,7 @@ def generate_sample_data():
                 "maintenanceSchedule": format_datetime_for_firebase(current_time + timedelta(days=170))
             },
             "alerts": {
-                "alert_9": {
-                    "type": "warning",
-                    "message": "CO2 levels slightly elevated - 420 ppm",
-                    "timestamp": format_datetime_for_firebase(current_time - timedelta(minutes=10)),
-                    "resolved": False,
-                    "assignedTo": "staff_3"
-                }
+                
             }
         }
     }

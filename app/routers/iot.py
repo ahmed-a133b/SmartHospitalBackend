@@ -24,6 +24,370 @@ def get_all_devices():
     data = get_ref("iotData").get()
     return data or {}
 
+# Environmental Sensors Routes
+@router.get("/env-sensors")
+def get_all_env_sensors():
+    """Return all environmental sensors and their data."""
+    try:
+        data = get_ref("iotData").get() or {}
+        
+        # Filter only environmental sensors
+        env_sensors = {}
+        for device_id, device_data in data.items():
+            if (device_data.get("deviceInfo", {}).get("type") == "environmental_sensor"):
+                env_sensors[device_id] = device_data
+        
+        return env_sensors
+        
+    except Exception as e:
+        logger.error(f"Error getting environmental sensors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/{sensor_id}")
+def get_env_sensor_by_id(sensor_id: str):
+    """Return specific environmental sensor data by ID."""
+    try:
+        sensor_data = get_ref(f"iotData/{sensor_id}").get()
+        
+        if not sensor_data:
+            raise HTTPException(status_code=404, detail="Environmental sensor not found")
+        
+        # Verify it's an environmental sensor
+        if sensor_data.get("deviceInfo", {}).get("type") != "environmental_sensor":
+            raise HTTPException(status_code=400, detail="Device is not an environmental sensor")
+        
+        return sensor_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting environmental sensor {sensor_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/room/{room_id}")
+def get_env_sensor_for_room(room_id: str):
+    """Return environmental sensor data for a specific room."""
+    try:
+        data = get_ref("iotData").get() or {}
+        
+        # Find environmental sensor for the specified room
+        for device_id, device_data in data.items():
+            device_info = device_data.get("deviceInfo", {})
+            if (device_info.get("type") == "environmental_sensor" and 
+                device_info.get("roomId") == room_id):
+                return {
+                    "sensorId": device_id,
+                    "roomId": room_id,
+                    **device_data
+                }
+        
+        raise HTTPException(status_code=404, detail=f"No environmental sensor found for room {room_id}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting environmental sensor for room {room_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/{sensor_id}/vitals/latest")
+def get_latest_env_vitals(sensor_id: str):
+    """Return the most recent environmental readings for a sensor."""
+    try:
+        sensor_data = get_ref(f"iotData/{sensor_id}").get()
+        
+        if not sensor_data:
+            raise HTTPException(status_code=404, detail="Environmental sensor not found")
+        
+        # Verify it's an environmental sensor
+        if sensor_data.get("deviceInfo", {}).get("type") != "environmental_sensor":
+            raise HTTPException(status_code=400, detail="Device is not an environmental sensor")
+        
+        # Get vitals (environmental readings)
+        vitals = sensor_data.get("vitals", {})
+        if not vitals:
+            return {"message": "No environmental readings available"}
+        
+        # Get the latest timestamp
+        latest_timestamp = max(vitals.keys())
+        latest_reading = vitals[latest_timestamp]
+        
+        return {
+            "sensorId": sensor_id,
+            "roomId": sensor_data.get("deviceInfo", {}).get("roomId"),
+            "timestamp": latest_timestamp,
+            "readings": latest_reading,
+            "deviceStatus": latest_reading.get("deviceStatus", "unknown"),
+            "batteryLevel": latest_reading.get("batteryLevel"),
+            "signalStrength": latest_reading.get("signalStrength")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting latest environmental readings for {sensor_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/{sensor_id}/vitals")
+def get_env_sensor_vitals_history(sensor_id: str, limit: int = 24):
+    """Return environmental readings history for a sensor (limited to recent readings)."""
+    try:
+        sensor_data = get_ref(f"iotData/{sensor_id}").get()
+        
+        if not sensor_data:
+            raise HTTPException(status_code=404, detail="Environmental sensor not found")
+        
+        # Verify it's an environmental sensor
+        if sensor_data.get("deviceInfo", {}).get("type") != "environmental_sensor":
+            raise HTTPException(status_code=400, detail="Device is not an environmental sensor")
+        
+        # Get vitals (environmental readings)
+        vitals = sensor_data.get("vitals", {})
+        if not vitals:
+            return {
+                "sensorId": sensor_id,
+                "roomId": sensor_data.get("deviceInfo", {}).get("roomId"),
+                "readings": [],
+                "count": 0
+            }
+        
+        # Sort timestamps and limit results
+        sorted_timestamps = sorted(vitals.keys(), reverse=True)
+        if limit > 0:
+            sorted_timestamps = sorted_timestamps[:limit]
+        
+        # Build response with readings
+        readings = []
+        for timestamp in sorted_timestamps:
+            reading_data = vitals[timestamp]
+            readings.append({
+                "timestamp": timestamp,
+                "temperature": reading_data.get("temperature"),
+                "humidity": reading_data.get("humidity"),
+                "airQuality": reading_data.get("airQuality"),
+                "lightLevel": reading_data.get("lightLevel"),
+                "noiseLevel": reading_data.get("noiseLevel"),
+                "pressure": reading_data.get("pressure"),
+                "co2Level": reading_data.get("co2Level"),
+                "deviceStatus": reading_data.get("deviceStatus"),
+                "batteryLevel": reading_data.get("batteryLevel"),
+                "signalStrength": reading_data.get("signalStrength")
+            })
+        
+        return {
+            "sensorId": sensor_id,
+            "roomId": sensor_data.get("deviceInfo", {}).get("roomId"),
+            "readings": readings,
+            "count": len(readings),
+            "totalReadings": len(vitals)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting environmental readings history for {sensor_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/{sensor_id}/alerts")
+def get_env_sensor_alerts(sensor_id: str, include_resolved: bool = False):
+    """Get alerts for an environmental sensor."""
+    try:
+        sensor_data = get_ref(f"iotData/{sensor_id}").get()
+        
+        if not sensor_data:
+            raise HTTPException(status_code=404, detail="Environmental sensor not found")
+        
+        # Verify it's an environmental sensor
+        if sensor_data.get("deviceInfo", {}).get("type") != "environmental_sensor":
+            raise HTTPException(status_code=400, detail="Device is not an environmental sensor")
+        
+        # Get alerts
+        alerts = sensor_data.get("alerts", {})
+        if not alerts:
+            return {
+                "sensorId": sensor_id,
+                "roomId": sensor_data.get("deviceInfo", {}).get("roomId"),
+                "alerts": [],
+                "count": 0,
+                "hasUnresolved": False
+            }
+        
+        # Filter alerts based on resolved status
+        filtered_alerts = []
+        unresolved_count = 0
+        
+        for alert_timestamp, alert_data in alerts.items():
+            if not alert_data.get("resolved", False):
+                unresolved_count += 1
+            
+            if include_resolved or not alert_data.get("resolved", False):
+                filtered_alerts.append({
+                    "alertId": alert_timestamp,
+                    "timestamp": alert_timestamp,
+                    **alert_data
+                })
+        
+        # Sort by timestamp (newest first)
+        filtered_alerts.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
+        return {
+            "sensorId": sensor_id,
+            "roomId": sensor_data.get("deviceInfo", {}).get("roomId"),
+            "alerts": filtered_alerts,
+            "count": len(filtered_alerts),
+            "totalAlerts": len(alerts),
+            "unresolvedCount": unresolved_count,
+            "hasUnresolved": unresolved_count > 0
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting environmental sensor alerts for {sensor_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/env-sensors/{sensor_id}/vitals")
+def post_env_sensor_vitals(sensor_id: str, data: dict):
+    """Post new environmental readings for a sensor."""
+    try:
+        # Verify sensor exists and is environmental sensor
+        sensor_data = get_ref(f"iotData/{sensor_id}").get()
+        if not sensor_data:
+            raise HTTPException(status_code=404, detail="Environmental sensor not found")
+        
+        if sensor_data.get("deviceInfo", {}).get("type") != "environmental_sensor":
+            raise HTTPException(status_code=400, detail="Device is not an environmental sensor")
+        
+        # Validate required environmental fields
+        required_fields = ["temperature", "humidity", "airQuality", "lightLevel", 
+                         "noiseLevel", "pressure", "co2Level"]
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Missing required environmental fields: {', '.join(missing_fields)}"
+            )
+        
+        # Generate timestamp
+        timestamp = datetime.now().isoformat()
+        timestamp = sanitize_timestamp(timestamp)
+        
+        # Add metadata if not provided
+        environmental_data = {
+            **data,
+            "deviceStatus": data.get("deviceStatus", "online"),
+            "batteryLevel": data.get("batteryLevel", 90),
+            "signalStrength": data.get("signalStrength", 95),
+            "timestamp": timestamp
+        }
+        
+        # Store environmental readings
+        vitals_ref = get_ref(f"iotData/{sensor_id}/vitals/{timestamp}")
+        vitals_ref.set(environmental_data)
+        
+        return {
+            "message": f"Environmental readings saved for sensor {sensor_id}",
+            "timestamp": timestamp,
+            "sensorId": sensor_id,
+            "roomId": sensor_data.get("deviceInfo", {}).get("roomId")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error posting environmental readings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/env-sensors/summary")
+def get_env_sensors_summary():
+    """Get summary of all environmental sensors with latest readings."""
+    try:
+        data = get_ref("iotData").get() or {}
+        
+        env_summary = []
+        total_sensors = 0
+        online_sensors = 0
+        sensors_with_alerts = 0
+        
+        for device_id, device_data in data.items():
+            device_info = device_data.get("deviceInfo", {})
+            
+            # Only process environmental sensors
+            if device_info.get("type") != "environmental_sensor":
+                continue
+            
+            total_sensors += 1
+            
+            # Get latest reading
+            vitals = device_data.get("vitals", {})
+            latest_reading = None
+            device_status = "offline"
+            
+            if vitals:
+                latest_timestamp = max(vitals.keys())
+                latest_reading = vitals[latest_timestamp]
+                device_status = latest_reading.get("deviceStatus", "offline")
+            
+            if device_status == "online":
+                online_sensors += 1
+            
+            # Check for unresolved alerts
+            alerts = device_data.get("alerts", {})
+            unresolved_alerts = sum(1 for alert in alerts.values() 
+                                  if not alert.get("resolved", False))
+            
+            if unresolved_alerts > 0:
+                sensors_with_alerts += 1
+            
+            # Build sensor summary
+            sensor_summary = {
+                "sensorId": device_id,
+                "roomId": device_info.get("roomId"),
+                "manufacturer": device_info.get("manufacturer"),
+                "model": device_info.get("model"),
+                "deviceStatus": device_status,
+                "unresolvedAlerts": unresolved_alerts,
+                "lastCalibrated": device_info.get("lastCalibrated"),
+                "calibrationDue": device_info.get("calibrationDue")
+            }
+            
+            # Add latest readings if available
+            if latest_reading:
+                sensor_summary.update({
+                    "latestReadings": {
+                        "temperature": latest_reading.get("temperature"),
+                        "humidity": latest_reading.get("humidity"),
+                        "airQuality": latest_reading.get("airQuality"),
+                        "co2Level": latest_reading.get("co2Level"),
+                        "noiseLevel": latest_reading.get("noiseLevel"),
+                        "lightLevel": latest_reading.get("lightLevel"),
+                        "pressure": latest_reading.get("pressure"),
+                        "batteryLevel": latest_reading.get("batteryLevel"),
+                        "signalStrength": latest_reading.get("signalStrength"),
+                        "timestamp": latest_reading.get("timestamp")
+                    }
+                })
+            
+            env_summary.append(sensor_summary)
+        
+        # Sort by room ID
+        env_summary.sort(key=lambda x: x.get("roomId", ""))
+        
+        return {
+            "summary": env_summary,
+            "statistics": {
+                "totalSensors": total_sensors,
+                "onlineSensors": online_sensors,
+                "offlineSensors": total_sensors - online_sensors,
+                "sensorsWithAlerts": sensors_with_alerts,
+                "systemHealth": round((online_sensors / total_sensors * 100), 1) if total_sensors > 0 else 0
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting environmental sensors summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{device_id}")
 def get_device_data(device_id: str):
     """Return all sensor data for a specific device."""
