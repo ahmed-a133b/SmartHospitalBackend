@@ -312,6 +312,9 @@ async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, b
     Optionally include environmental sensor data from the same room
     """
     try:
+        # Log the received parameters for debugging
+        logger.info(f"Anomaly detection called for monitor_id: {monitor_id}, env_sensor_id: {env_sensor_id}")
+        
         # Get device data first to check if it exists and has a patient assigned
         device_ref = get_ref(f"iotData/{monitor_id}")
         device_data = device_ref.get()

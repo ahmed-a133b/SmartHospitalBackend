@@ -277,30 +277,46 @@ class AnomalyDetectionService:
             env_sensor_id = None
             
             # Find patient's room from room mapping
+            logger.debug(f"Looking for patient {patient_id} in room mapping: {self.room_to_patients}")
             for room_id, patients in getattr(self, 'room_to_patients', {}).items():
                 for patient_info in patients:
                     if patient_info['patient_id'] == patient_id:
                         patient_room = room_id
+                        logger.info(f"Found patient {patient_id} in room {patient_room}")
                         break
                 if patient_room:
                     break
             
             # Find environmental sensor for patient's room
             if patient_room:
+                logger.debug(f"Looking for environmental sensor in room {patient_room}")
+                logger.debug(f"Available environmental sensors: {list(self.environmental_sensors.keys())}")
                 for sensor_id, sensor_info in getattr(self, 'environmental_sensors', {}).items():
+                    logger.debug(f"Checking sensor {sensor_id} with roomId: {sensor_info.get('roomId')}")
                     if sensor_info.get('roomId') == patient_room:
                         env_sensor_id = sensor_id
+                        logger.info(f"Found environmental sensor {env_sensor_id} for room {patient_room}")
                         break
+                if not env_sensor_id:
+                    logger.warning(f"No environmental sensor found for room {patient_room}")
+            else:
+                logger.warning(f"Could not find room for patient {patient_id}")
             
             # Build the request parameters
             params = {}
             if env_sensor_id:
                 params['env_sensor_id'] = env_sensor_id
-                logger.debug(f"Including environmental sensor {env_sensor_id} for patient {patient_id} in room {patient_room}")
+                logger.info(f"Including environmental sensor {env_sensor_id} for patient {patient_id} in room {patient_room}")
+            else:
+                logger.info(f"No environmental sensor found for patient {patient_id} in room {patient_room}")
+            
+            # Log the full request details
+            request_url = f"{self.api_base_url}/anomalies/detect/{monitor_id}"
+            logger.debug(f"Making request to: {request_url} with params: {params}")
             
             # Call the anomaly detection endpoint with environmental data
             response = requests.get(
-                f"{self.api_base_url}/anomalies/detect/{monitor_id}",
+                request_url,
                 params=params,
                 timeout=10
             )
