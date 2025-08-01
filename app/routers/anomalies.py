@@ -276,13 +276,16 @@ def generate_alert_message(anomaly_result: Dict) -> str:
     severity = anomaly_result["severity_level"]
     anomaly_types = anomaly_result["anomaly_type"]
     
+    # Format device ID: capitalize first letter and replace underscore with space
+    formatted_device_id = device_id.replace("_", " ").capitalize()
+    
     if not anomaly_types:
-        return f"Anomaly detected for device {device_id}"
+        return f"Anomaly detected for device {formatted_device_id}"
     
     if len(anomaly_types) == 1:
-        return f"{severity} Alert: {anomaly_types[0]} detected for device {device_id}"
+        return f"{severity} Alert: {anomaly_types[0]} detected for device {formatted_device_id}"
     else:
-        return f"{severity} Alert: Multiple anomalies detected for device {device_id}: {', '.join(anomaly_types)}"
+        return f"{severity} Alert: Multiple anomalies detected for device {formatted_device_id}: {', '.join(anomaly_types)}"
 
 @router.get("/model/status")
 def get_model_status():
@@ -407,7 +410,7 @@ def get_device_anomalies(device_id: str, hours: int = 24):
                     if data_time >= cutoff_time:
                         filtered_anomalies[timestamp] = data
                 except Exception:
-                    # Include data if timestamp parsing fails
+                    
                     filtered_anomalies[timestamp] = data
             
             return filtered_anomalies

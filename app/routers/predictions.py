@@ -4,7 +4,7 @@ from app.firebase_config import get_ref
 import joblib
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import re
 router = APIRouter(prefix="/predict", tags=["Predictions"])
@@ -12,6 +12,12 @@ router = APIRouter(prefix="/predict", tags=["Predictions"])
 # Loading the trained model
 model = joblib.load("models/patient_risk_model.pkl")
 
+# Pakistan Standard Time (UTC+5)
+PST = timezone(timedelta(hours=5))
+
+def get_pst_now():
+    """Get current time in Pakistan Standard Time"""
+    return datetime.now(PST)
 
 
 
@@ -86,8 +92,8 @@ def get_patient_info(patient_id: str) -> dict:
 def log_prediction(patient_id: str, prediction_data: dict, input_data: dict):
     """Log the prediction in AI logs with timestamp-based key"""
     try:
-        timestamp = datetime.now()
-        timestamp_str = format_datetime_for_firebase(timestamp)  # Ensure Firebase-safe format
+        timestamp = get_pst_now()
+        timestamp_str = format_datetime_for_firebase(timestamp)
         # Create AI log entry
         log_entry = {
             "modelId": "patient_risk_model",
