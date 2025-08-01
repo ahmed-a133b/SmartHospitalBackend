@@ -71,16 +71,16 @@ class VitalPatternGenerator:
     def __init__(self):
         self.active_scenarios = {}  # deviceId -> scenario info
         self.scenario_probabilities = {
-            RiskScenario.CARDIAC_STRESS: 0.15,
-            RiskScenario.HYPERTENSIVE_PATTERN: 0.12,
-            RiskScenario.HYPOTENSIVE_TREND: 0.10,
-            RiskScenario.RESPIRATORY_COMPROMISE: 0.12,
-            RiskScenario.OXYGEN_DESATURATION: 0.10,
-            RiskScenario.FEVER_PROGRESSION: 0.18,
-            RiskScenario.HYPOTHERMIC_TREND: 0.08,
-            RiskScenario.GLYCEMIC_INSTABILITY: 0.15,
-            RiskScenario.TACHYCARDIC_PATTERN: 0.12,
-            RiskScenario.BRADYCARDIC_PATTERN: 0.10,
+            RiskScenario.CARDIAC_STRESS: 0.005,  # Much lower probability (0.5%)
+            RiskScenario.HYPERTENSIVE_PATTERN: 0.004,
+            RiskScenario.HYPOTENSIVE_TREND: 0.003,
+            RiskScenario.RESPIRATORY_COMPROMISE: 0.004,
+            RiskScenario.OXYGEN_DESATURATION: 0.003,
+            RiskScenario.FEVER_PROGRESSION: 0.006,
+            RiskScenario.HYPOTHERMIC_TREND: 0.002,
+            RiskScenario.GLYCEMIC_INSTABILITY: 0.005,
+            RiskScenario.TACHYCARDIC_PATTERN: 0.004,
+            RiskScenario.BRADYCARDIC_PATTERN: 0.003,
         }
     
     def should_start_risk_scenario(self, patient_profile: PatientProfile) -> Optional[RiskScenario]:
@@ -270,56 +270,22 @@ class AnomalyDetectionService:
         self.detected_anomalies = {}  # Store detected anomalies
         
     def check_patient_anomalies(self, patient_id: str, monitor_id: str) -> Optional[Dict]:
-        """Check for anomalies for a specific patient using monitor ID and environmental data"""
+        """Check for anomalies for a specific patient using monitor ID - environmental data is automatically detected"""
         try:
-            # Get patient's room to find corresponding environmental sensor
-            patient_room = None
-            env_sensor_id = None
+            # Log the anomaly detection request
+            logger.info(f"🔍 Checking anomalies for patient {patient_id} on monitor {monitor_id}")
             
-            # Find patient's room from room mapping
-            logger.debug(f"Looking for patient {patient_id} in room mapping: {self.room_to_patients}")
-            for room_id, patients in getattr(self, 'room_to_patients', {}).items():
-                for patient_info in patients:
-                    if patient_info['patient_id'] == patient_id:
-                        patient_room = room_id
-                        logger.info(f"Found patient {patient_id} in room {patient_room}")
-                        break
-                if patient_room:
-                    break
-            
-            # Find environmental sensor for patient's room
-            if patient_room:
-                logger.debug(f"Looking for environmental sensor in room {patient_room}")
-                logger.debug(f"Available environmental sensors: {list(self.environmental_sensors.keys())}")
-                for sensor_id, sensor_info in getattr(self, 'environmental_sensors', {}).items():
-                    logger.debug(f"Checking sensor {sensor_id} with roomId: {sensor_info.get('roomId')}")
-                    if sensor_info.get('roomId') == patient_room:
-                        env_sensor_id = sensor_id
-                        logger.info(f"Found environmental sensor {env_sensor_id} for room {patient_room}")
-                        break
-                if not env_sensor_id:
-                    logger.warning(f"No environmental sensor found for room {patient_room}")
-            else:
-                logger.warning(f"Could not find room for patient {patient_id}")
-            
-            # Build the request parameters
-            params = {}
-            if env_sensor_id:
-                params['env_sensor_id'] = env_sensor_id
-                logger.info(f"Including environmental sensor {env_sensor_id} for patient {patient_id} in room {patient_room}")
-            else:
-                logger.info(f"No environmental sensor found for patient {patient_id} in room {patient_room}")
-            
-            # Log the full request details
+            # Call the anomaly detection endpoint (no need to find env sensor manually)
             request_url = f"{self.api_base_url}/anomalies/detect/{monitor_id}"
-            logger.debug(f"Making request to: {request_url} with params: {params}")
+            logger.info(f"🌐 Making request to: {request_url}")
             
-            # Call the anomaly detection endpoint with environmental data
+            # Simple GET request - the API will handle finding environmental sensors automatically
             response = requests.get(
                 request_url,
-                params=params,
                 timeout=10
             )
+            
+            logger.info(f"� Response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
@@ -330,8 +296,11 @@ class AnomalyDetectionService:
                     severity = result.get('severity_level', 'UNKNOWN')
                     confidence = result.get('confidence', 0.0)
                     anomaly_score = result.get('anomaly_score', 0.0)
+                    room_id = result.get('room_id', 'Unknown')
+                    env_sensor_used = result.get('env_sensor_id')
+                    env_data_included = result.get('env_data_included', False)
                     
-                    logger.warning(f"🚨 ANOMALIES DETECTED for patient {patient_id} (Room: {patient_room}): {len(anomaly_types)} anomaly types")
+                    logger.warning(f"🚨 ANOMALIES DETECTED for patient {patient_id} (Room: {room_id}): {len(anomaly_types)} anomaly types")
                     
                     # Log anomaly details
                     for anomaly_type in anomaly_types:
@@ -339,12 +308,18 @@ class AnomalyDetectionService:
                     logger.warning(f"🔴 Severity: {severity} | Confidence: {confidence:.2f}")
                     logger.warning(f"📈 Anomaly Score: {anomaly_score:.3f}")
                     
-                    if env_sensor_id:
-                        logger.warning(f"🌡️ Environmental data from sensor {env_sensor_id} included in analysis")
+                    if env_data_included and env_sensor_used:
+                        logger.warning(f"🌡️ Environmental data from sensor {env_sensor_used} was included in analysis")
+                    else:
+                        logger.warning(f"⚠️ No environmental data was available for this analysis")
                     
                     return result
                 else:
-                    logger.debug(f"✅ No anomalies detected for patient {patient_id} (Room: {patient_room})")
+                    room_id = result.get('room_id', 'Unknown')
+                    env_data_included = result.get('env_data_included', False)
+                    logger.debug(f"✅ No anomalies detected for patient {patient_id} (Room: {room_id})")
+                    if env_data_included:
+                        logger.debug(f"🌡️ Environmental data was included in the analysis")
                     return None
                     
             else:
@@ -371,13 +346,9 @@ class AnomalyDetectionService:
         }
         return severity_map.get(severity.lower(), 'warning')
     
-    def check_all_patients(self, patient_profiles: Dict, room_to_patients: Dict, environmental_sensors: Dict) -> Dict[str, Optional[Dict]]:
-        """Check anomalies for all patients with environmental context"""
+    def check_all_patients(self, patient_profiles: Dict) -> Dict[str, Optional[Dict]]:
+        """Check anomalies for all patients - environmental sensors are automatically detected"""
         results = {}
-        
-        # Store references for use in check_patient_anomalies
-        self.room_to_patients = room_to_patients
-        self.environmental_sensors = environmental_sensors
         
         for monitor_id, patient_profile in patient_profiles.items():
             patient_id = patient_profile.patientId
@@ -427,7 +398,7 @@ class EnhancedHospitalDataSimulator:
         self.init_firebase()
         self.vital_pattern_generator = VitalPatternGenerator()
         self.env_data_generator = EnvironmentalDataGenerator()
-        self.anomaly_detector = AnomalyDetectionService("https://smarthospitalbackend.onrender.com")
+        self.anomaly_detector = AnomalyDetectionService("http://127.0.0.1:8000")
         self.patient_profiles = {}
         self.environmental_sensors = {}
         self.room_to_patients = {}  # Map rooms to patients for environmental correlation
@@ -525,15 +496,25 @@ class EnhancedHospitalDataSimulator:
                         logger.warning(f"No patient found for monitor {monitor_id} (patient_id: {patient_id})")
                 
                 elif device_info.get('type') == 'environmental_sensor':
-                    # Store environmental sensor info
+                    # Store environmental sensor info with detailed logging
+                    sensor_room_id = device_info.get('roomId')
                     self.environmental_sensors[monitor_id] = {
-                        'roomId': device_info.get('roomId'),
+                        'roomId': sensor_room_id,
                         'roomType': device_info.get('roomType', 'general_ward'),
                         'deviceInfo': device_info
                     }
-                    logger.info(f"Loaded environmental sensor {monitor_id} for room {device_info.get('roomId')}")
+                    logger.info(f"📡 Loaded environmental sensor {monitor_id} for room {sensor_room_id}")
+                    logger.debug(f"📡 Environmental sensor device info: {device_info}")
             
-            logger.info(f"Loaded {len(self.patient_profiles)} patient profiles and {len(self.environmental_sensors)} environmental sensors")
+            logger.info(f"✅ Loaded {len(self.patient_profiles)} patient profiles and {len(self.environmental_sensors)} environmental sensors")
+            
+            # Log all environmental sensors and their rooms
+            if self.environmental_sensors:
+                logger.info("🌡️ Environmental sensors summary:")
+                for sensor_id, sensor_info in self.environmental_sensors.items():
+                    logger.info(f"  - {sensor_id}: Room {sensor_info.get('roomId', 'NO_ROOM')}")
+            else:
+                logger.warning("⚠️ No environmental sensors found!")
             
             # Create mapping of rooms to patients for environmental simulation
             self.room_to_patients = {}
@@ -625,17 +606,17 @@ class EnhancedHospitalDataSimulator:
         return baseline
     
     def generate_normal_vitals(self, baseline: Dict, variation_factor: float = 1.0) -> Dict:
-        """Generate normal vitals with natural variation"""
+        """Generate normal vitals with natural variation - reduced ranges to match training data"""
         vitals = {}
         
-        # Add realistic variation to each vital sign with increased ranges
-        vitals['heartRate'] = max(50, min(120, baseline['heartRate'] + random.randint(-15, 15) * variation_factor))
-        vitals['oxygenLevel'] = max(90, min(100, baseline['oxygenLevel'] + random.uniform(-3, 2) * variation_factor))
-        vitals['temperature'] = max(35.5, min(39.0, baseline['temperature'] + random.uniform(-0.8, 0.8) * variation_factor))
-        vitals['systolicBP'] = max(80, min(160, baseline['systolicBP'] + random.randint(-20, 20) * variation_factor))
-        vitals['diastolicBP'] = max(50, min(100, baseline['diastolicBP'] + random.randint(-15, 15) * variation_factor))
-        vitals['respiratoryRate'] = max(10, min(25, baseline['respiratoryRate'] + random.randint(-4, 6) * variation_factor))
-        vitals['glucose'] = max(70, min(180, baseline['glucose'] + random.randint(-30, 40) * variation_factor))
+        # Reduced variation ranges to better align with training data
+        vitals['heartRate'] = max(50, min(110, baseline['heartRate'] + random.randint(-8, 8) * variation_factor))
+        vitals['oxygenLevel'] = max(90, min(100, baseline['oxygenLevel'] + random.uniform(-1.5, 1.5) * variation_factor))
+        vitals['temperature'] = max(35.5, min(38.5, baseline['temperature'] + random.uniform(-0.4, 0.4) * variation_factor))
+        vitals['systolicBP'] = max(80, min(150, baseline['systolicBP'] + random.randint(-12, 12) * variation_factor))
+        vitals['diastolicBP'] = max(50, min(95, baseline['diastolicBP'] + random.randint(-8, 8) * variation_factor))
+        vitals['respiratoryRate'] = max(10, min(22, baseline['respiratoryRate'] + random.randint(-3, 3) * variation_factor))
+        vitals['glucose'] = max(70, min(150, baseline['glucose'] + random.randint(-15, 20) * variation_factor))
         
         return vitals
     
@@ -668,15 +649,15 @@ class EnhancedHospitalDataSimulator:
                     int(time_elapsed)
                 )
                 
-                # Scenario ends after some time or recovers
-                if patient_profile.scenario_progression >= 1.0 and random.random() < 0.2:  # 20% chance to end each cycle (increased from 10%)
+                # Scenario ends after some time or recovers - higher chance to end
+                if patient_profile.scenario_progression >= 0.5 and random.random() < 0.4:  # 40% chance to end after halfway progression
                     patient_profile.scenario = None
                     patient_profile.scenario_start_time = None
                     patient_profile.scenario_progression = 0.0
                     logger.info(f"Risk scenario ended for patient {patient_profile.patientId}")
             else:
-                # Generate normal vitals with natural variation (increased variation for critical patients)
-                variation = 2.0 if patient_profile.currentState == 'critical' else 1.5
+                # Generate normal vitals with natural variation (reduced variation for more stability)
+                variation = 1.2 if patient_profile.currentState == 'critical' else 0.8
                 vitals = self.generate_normal_vitals(patient_profile.baselineVitals, variation)
             
             # Add common fields
@@ -790,9 +771,7 @@ class EnhancedHospitalDataSimulator:
                 if self.simulation_cycle % 2 == 0:  # Check every other cycle (every ~10 seconds)
                     logger.info("Running anomaly detection checks...")
                     anomaly_results = self.anomaly_detector.check_all_patients(
-                        self.patient_profiles, 
-                        self.room_to_patients, 
-                        self.environmental_sensors
+                        self.patient_profiles
                     )
                     
                     # Log anomaly detection summary

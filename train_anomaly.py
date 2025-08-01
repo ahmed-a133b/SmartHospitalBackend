@@ -11,7 +11,7 @@ import joblib
 import random
 import os
 
-def generate_synthetic_training_data(num_samples=500):
+def generate_synthetic_training_data(num_samples=1000):
     """
     Generate synthetic training data for anomaly detection
     This creates realistic vital signs data with complete environmental data
@@ -19,23 +19,38 @@ def generate_synthetic_training_data(num_samples=500):
     training_data = []
     
     for i in range(num_samples):
-        # Generate normal vital signs with realistic variations
+        # Generate more realistic normal data with varied baselines for different patient types
+        patient_type = random.choice(['young_healthy', 'middle_aged', 'elderly', 'pediatric'])
+        
+        if patient_type == 'young_healthy':
+            base_hr, base_sys, base_dia = 68, 115, 75
+            base_temp, base_o2, base_rr = 36.8, 99, 14
+        elif patient_type == 'middle_aged':
+            base_hr, base_sys, base_dia = 72, 125, 82
+            base_temp, base_o2, base_rr = 37.0, 98, 16
+        elif patient_type == 'elderly':
+            base_hr, base_sys, base_dia = 75, 135, 85
+            base_temp, base_o2, base_rr = 37.1, 97, 18
+        else:  # pediatric
+            base_hr, base_sys, base_dia = 85, 100, 65
+            base_temp, base_o2, base_rr = 37.2, 99, 22
+        
         data_point = {
-            'heart_rate': np.random.normal(75, 10),  # Normal: 60-100
-            'systolic_bp': np.random.normal(120, 15),  # Normal: 90-140
-            'diastolic_bp': np.random.normal(80, 10),  # Normal: 60-90
-            'temperature': np.random.normal(36.8, 0.3),  # Normal: 36.1-37.2
-            'oxygen_level': np.random.normal(97, 2),  # Normal: 95-100
-            'respiratory_rate': np.random.normal(16, 3),  # Normal: 12-20
-            'glucose': np.random.normal(100, 20),  # Normal: 70-140
-            # Complete environmental data matching data_simulation.py
-            'room_temperature': np.random.normal(22, 2),  # Normal: 20-24
-            'humidity': np.random.normal(45, 8),  # Normal: 35-65
-            'air_quality': np.random.normal(85, 10),  # Normal: 70-100
-            'noise_level': np.random.normal(35, 8),  # Normal: 25-45 dB
-            'co2_level': np.random.normal(400, 80),  # Normal: 300-600 ppm
-            'light_level': np.random.normal(300, 60),  # Normal: 200-450 lux
-            'pressure': np.random.normal(1013.25, 3)  # Normal: 1008-1018 hPa
+            'heart_rate': np.random.normal(base_hr, 8),
+            'systolic_bp': np.random.normal(base_sys, 12),
+            'diastolic_bp': np.random.normal(base_dia, 8),
+            'temperature': np.random.normal(base_temp, 0.3),
+            'oxygen_level': np.random.normal(base_o2, 1.5),
+            'respiratory_rate': np.random.normal(base_rr, 3),
+            'glucose': np.random.normal(100, 15),  # Reduced variation for more realistic normal range
+            # Environmental data with more realistic variation
+            'env_temperature': np.random.normal(22, 1.5),  # Reduced variation
+            'env_humidity': np.random.normal(45, 6),  # Reduced variation
+            'env_air_quality': np.random.normal(85, 7),  # Reduced variation
+            'env_noise_level': np.random.normal(35, 6),  # Reduced variation
+            'env_co2_level': np.random.normal(400, 50),  # Reduced variation
+            'env_light_level': np.random.normal(300, 40),  # Reduced variation
+            'env_pressure': np.random.normal(1013.25, 2)  # Reduced variation
         }
         
         # Ensure values are within realistic bounds
@@ -46,20 +61,20 @@ def generate_synthetic_training_data(num_samples=500):
         data_point['oxygen_level'] = max(90, min(100, data_point['oxygen_level']))
         data_point['respiratory_rate'] = max(10, min(25, data_point['respiratory_rate']))
         data_point['glucose'] = max(60, min(180, data_point['glucose']))
-        # Environmental bounds
-        data_point['room_temperature'] = max(18, min(28, data_point['room_temperature']))
-        data_point['humidity'] = max(25, min(80, data_point['humidity']))
-        data_point['air_quality'] = max(40, min(100, data_point['air_quality']))
-        data_point['noise_level'] = max(20, min(60, data_point['noise_level']))
-        data_point['co2_level'] = max(300, min(800, data_point['co2_level']))
-        data_point['light_level'] = max(150, min(500, data_point['light_level']))
-        data_point['pressure'] = max(1000, min(1030, data_point['pressure']))
+        # Environmental bounds - update field names to match API
+        data_point['env_temperature'] = max(18, min(28, data_point['env_temperature']))
+        data_point['env_humidity'] = max(25, min(80, data_point['env_humidity']))
+        data_point['env_air_quality'] = max(40, min(100, data_point['env_air_quality']))
+        data_point['env_noise_level'] = max(20, min(60, data_point['env_noise_level']))
+        data_point['env_co2_level'] = max(300, min(800, data_point['env_co2_level']))
+        data_point['env_light_level'] = max(150, min(500, data_point['env_light_level']))
+        data_point['env_pressure'] = max(1000, min(1030, data_point['env_pressure']))
         
         training_data.append(data_point)
     
     return training_data
 
-def generate_anomalous_training_data(num_samples=50):
+def generate_anomalous_training_data(num_samples=100):
     """
     Generate some anomalous training samples to improve model's detection capability
     This creates data points with various types of anomalies
@@ -76,13 +91,13 @@ def generate_anomalous_training_data(num_samples=50):
             'oxygen_level': np.random.normal(97, 2),
             'respiratory_rate': np.random.normal(16, 3),
             'glucose': np.random.normal(100, 20),
-            'room_temperature': np.random.normal(22, 2),
-            'humidity': np.random.normal(45, 8),
-            'air_quality': np.random.normal(85, 10),
-            'noise_level': np.random.normal(35, 8),
-            'co2_level': np.random.normal(400, 80),
-            'light_level': np.random.normal(300, 60),
-            'pressure': np.random.normal(1013.25, 3)
+            'env_temperature': np.random.normal(22, 2),
+            'env_humidity': np.random.normal(45, 8),
+            'env_air_quality': np.random.normal(85, 10),
+            'env_noise_level': np.random.normal(35, 8),
+            'env_co2_level': np.random.normal(400, 80),
+            'env_light_level': np.random.normal(300, 60),
+            'env_pressure': np.random.normal(1013.25, 3)
         }
         
         # Randomly introduce anomalies
@@ -100,21 +115,21 @@ def generate_anomalous_training_data(num_samples=50):
                 
         elif anomaly_type == 'environmental_anomaly':
             # Introduce environmental anomalies
-            data_point['room_temperature'] = random.uniform(32, 40)  # Too hot
-            data_point['humidity'] = random.uniform(85, 95)  # Too humid
-            data_point['air_quality'] = random.uniform(20, 40)  # Poor air
-            data_point['noise_level'] = random.uniform(70, 90)  # Too noisy
-            data_point['co2_level'] = random.uniform(800, 1500)  # High CO2
-            data_point['light_level'] = random.uniform(10, 50)  # Too dim
-            data_point['pressure'] = random.uniform(990, 1000)  # Low pressure
+            data_point['env_temperature'] = random.uniform(32, 40)  # Too hot
+            data_point['env_humidity'] = random.uniform(85, 95)  # Too humid
+            data_point['env_air_quality'] = random.uniform(20, 40)  # Poor air
+            data_point['env_noise_level'] = random.uniform(70, 90)  # Too noisy
+            data_point['env_co2_level'] = random.uniform(800, 1500)  # High CO2
+            data_point['env_light_level'] = random.uniform(10, 50)  # Too dim
+            data_point['env_pressure'] = random.uniform(990, 1000)  # Low pressure
             
         else:  # combined_anomaly
             # Both vital and environmental issues
             data_point['heart_rate'] = random.uniform(110, 140)
             data_point['oxygen_level'] = random.uniform(88, 94)
-            data_point['room_temperature'] = random.uniform(28, 35)
-            data_point['co2_level'] = random.uniform(600, 1000)
-            data_point['noise_level'] = random.uniform(60, 80)
+            data_point['env_temperature'] = random.uniform(28, 35)
+            data_point['env_co2_level'] = random.uniform(600, 1000)
+            data_point['env_noise_level'] = random.uniform(60, 80)
         
         # Ensure bounds are still respected
         data_point['heart_rate'] = max(40, min(200, data_point['heart_rate']))
@@ -124,13 +139,13 @@ def generate_anomalous_training_data(num_samples=50):
         data_point['oxygen_level'] = max(70, min(100, data_point['oxygen_level']))
         data_point['respiratory_rate'] = max(8, min(50, data_point['respiratory_rate']))
         data_point['glucose'] = max(40, min(400, data_point['glucose']))
-        data_point['room_temperature'] = max(10, min(45, data_point['room_temperature']))
-        data_point['humidity'] = max(10, min(100, data_point['humidity']))
-        data_point['air_quality'] = max(0, min(100, data_point['air_quality']))
-        data_point['noise_level'] = max(15, min(100, data_point['noise_level']))
-        data_point['co2_level'] = max(200, min(2000, data_point['co2_level']))
-        data_point['light_level'] = max(5, min(1000, data_point['light_level']))
-        data_point['pressure'] = max(980, min(1050, data_point['pressure']))
+        data_point['env_temperature'] = max(10, min(45, data_point['env_temperature']))
+        data_point['env_humidity'] = max(10, min(100, data_point['env_humidity']))
+        data_point['env_air_quality'] = max(0, min(100, data_point['env_air_quality']))
+        data_point['env_noise_level'] = max(15, min(100, data_point['env_noise_level']))
+        data_point['env_co2_level'] = max(200, min(2000, data_point['env_co2_level']))
+        data_point['env_light_level'] = max(5, min(1000, data_point['env_light_level']))
+        data_point['env_pressure'] = max(980, min(1050, data_point['env_pressure']))
         
         anomalous_data.append(data_point)
     
@@ -141,9 +156,9 @@ def prepare_features(data_list):
     Convert list of data dictionaries to feature matrix
     """
     feature_names = ['heart_rate', 'systolic_bp', 'diastolic_bp', 'temperature', 
-                    'oxygen_level', 'respiratory_rate', 'glucose', 'room_temperature', 
-                    'humidity', 'air_quality', 'noise_level', 'co2_level', 
-                    'light_level', 'pressure']
+                    'oxygen_level', 'respiratory_rate', 'glucose', 'env_temperature', 
+                    'env_humidity', 'env_air_quality', 'env_noise_level', 'env_co2_level', 
+                    'env_light_level', 'env_pressure']
     
     features = []
     for data_point in data_list:
@@ -159,11 +174,11 @@ def train_isolation_forest_model():
     print("Starting Isolation Forest model training with complete environmental data...")
     
     # Generate normal training data
-    normal_training_data = generate_synthetic_training_data(1000)  # Increased samples
+    normal_training_data = generate_synthetic_training_data(1500) 
     print(f"Generated {len(normal_training_data)} normal synthetic data points")
     
     # Generate some anomalous data for better model understanding
-    anomalous_training_data = generate_anomalous_training_data(100)
+    anomalous_training_data = generate_anomalous_training_data(250)
     print(f"Generated {len(anomalous_training_data)} anomalous synthetic data points")
     
     # Combine all training data
@@ -175,7 +190,7 @@ def train_isolation_forest_model():
     print(f"Feature matrix shape: {X_train.shape}")
     print(f"Features: {feature_names}")
     print("Environmental features included:")
-    env_features = [f for f in feature_names if f in ['room_temperature', 'humidity', 'air_quality', 'noise_level', 'co2_level', 'light_level', 'pressure']]
+    env_features = [f for f in feature_names if f in ['env_temperature', 'env_humidity', 'env_air_quality', 'env_noise_level', 'env_co2_level', 'env_light_level', 'env_pressure']]
     for i, feature in enumerate(env_features, 1):
         print(f"  {i}. {feature}")
     
@@ -184,17 +199,18 @@ def train_isolation_forest_model():
     X_scaled = scaler.fit_transform(X_train)
     print("Data normalized using StandardScaler")
     
-    # Initialize and train Isolation Forest with adjusted contamination
-    # Since we have some anomalous samples in training, adjust contamination accordingly
-    contamination_rate = len(anomalous_training_data) / len(all_training_data)
-    print(f"Contamination rate: {contamination_rate:.3f} ({len(anomalous_training_data)}/{len(all_training_data)})")
+    # Initialize and train Isolation Forest with more restrictive contamination
+    # Reduce contamination rate to make model less sensitive to normal variations
+    contamination_rate = min(0.05, len(anomalous_training_data) / len(all_training_data))  # Cap at 5%
+    print(f"Using contamination rate: {contamination_rate:.3f} (reduced for better precision)")
     
     isolation_forest = IsolationForest(
-        contamination=contamination_rate,  # Match actual proportion of anomalies
+        contamination=contamination_rate,  # More restrictive contamination
         random_state=42,
-        n_estimators=150,  # Increased for better performance
-        max_samples='auto',
-        max_features=1.0
+        n_estimators=200,  # Increased for better performance
+        max_samples=0.8,  # Use subset of samples for each tree
+        max_features=0.8,  # Use subset of features for each tree  
+        bootstrap=True  # Enable bootstrapping for variety
     )
     
     print("Training Isolation Forest with enhanced environmental features...")
@@ -208,7 +224,7 @@ def train_isolation_forest_model():
         print(f"  {feature}: mean={feature_data.mean():.2f}, std={feature_data.std():.2f}, "
               f"range=[{feature_data.min():.2f}, {feature_data.max():.2f}]")
     
-    # Save model and scaler (following patient risk model approach)
+    # Save model and scaler
     model_data = {
         'model': isolation_forest,
         'scaler': scaler,
@@ -254,13 +270,13 @@ def test_model(model, scaler, feature_names):
         'oxygen_level': 97,
         'respiratory_rate': 16,
         'glucose': 100,
-        'room_temperature': 22,
-        'humidity': 45,
-        'air_quality': 85,
-        'noise_level': 35,
-        'co2_level': 400,
-        'light_level': 300,
-        'pressure': 1013.25
+        'env_temperature': 22,
+        'env_humidity': 45,
+        'env_air_quality': 85,
+        'env_noise_level': 35,
+        'env_co2_level': 400,
+        'env_light_level': 300,
+        'env_pressure': 1013.25
     }
     
     # Prepare normal sample
@@ -282,13 +298,13 @@ def test_model(model, scaler, feature_names):
         'oxygen_level': 85,  # Low
         'respiratory_rate': 35,  # High
         'glucose': 250,  # High
-        'room_temperature': 30,  # High
-        'humidity': 85,  # High
-        'air_quality': 40,  # Poor (low is bad for air quality)
-        'noise_level': 75,  # Very loud
-        'co2_level': 1000,  # High CO2
-        'light_level': 50,  # Very dim
-        'pressure': 995  # Low atmospheric pressure
+        'env_temperature': 30,  # High
+        'env_humidity': 85,  # High
+        'env_air_quality': 40,  # Poor (low is bad for air quality)
+        'env_noise_level': 75,  # Very loud
+        'env_co2_level': 1000,  # High CO2
+        'env_light_level': 50,  # Very dim
+        'env_pressure': 995  # Low atmospheric pressure
     }
     
     # Prepare abnormal sample
@@ -310,13 +326,13 @@ def test_model(model, scaler, feature_names):
         'oxygen_level': 98,  # Normal
         'respiratory_rate': 15,  # Normal
         'glucose': 95,  # Normal
-        'room_temperature': 35,  # Very hot
-        'humidity': 95,  # Very humid
-        'air_quality': 30,  # Poor air quality
-        'noise_level': 80,  # Very noisy
-        'co2_level': 1200,  # Dangerous CO2 levels
-        'light_level': 20,  # Almost dark
-        'pressure': 980  # Very low pressure
+        'env_temperature': 35,  # Very hot
+        'env_humidity': 95,  # Very humid
+        'env_air_quality': 30,  # Poor air quality
+        'env_noise_level': 80,  # Very noisy
+        'env_co2_level': 1200,  # Dangerous CO2 levels
+        'env_light_level': 20,  # Almost dark
+        'env_pressure': 980  # Very low pressure
     }
     
     # Prepare environmental anomaly sample
@@ -363,7 +379,7 @@ def load_and_test_saved_model():
     print(f"Features ({len(feature_names)}): {feature_names}")
     
     # Verify all environmental features are included
-    env_features = [f for f in feature_names if f in ['room_temperature', 'humidity', 'air_quality', 'noise_level', 'co2_level', 'light_level', 'pressure']]
+    env_features = [f for f in feature_names if f in ['env_temperature', 'env_humidity', 'env_air_quality', 'env_noise_level', 'env_co2_level', 'env_light_level', 'env_pressure']]
     print(f"Environmental features ({len(env_features)}): {env_features}")
     
     # Test the loaded model

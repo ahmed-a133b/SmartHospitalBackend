@@ -108,6 +108,28 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str, environmental_d
         
         # Combine sensor data and environmental data
         combined_data = sensor_data.copy()
+        
+        # Map Firebase vital signs to model feature names
+        vital_mapping = {
+            'heartRate': 'heart_rate',
+            'oxygenLevel': 'oxygen_level',
+            'respiratoryRate': 'respiratory_rate',
+            'temperature': 'temperature',
+            'glucose': 'glucose'
+        }
+        
+        # Create a properly mapped dataset for the model
+        mapped_data = {}
+        for fb_key, model_key in vital_mapping.items():
+            if fb_key in sensor_data:
+                mapped_data[model_key] = sensor_data[fb_key]
+        
+        # Handle blood pressure mapping (it's an object in Firebase)
+        if 'bloodPressure' in sensor_data and isinstance(sensor_data['bloodPressure'], dict):
+            bp = sensor_data['bloodPressure']
+            mapped_data['systolic_bp'] = bp.get('systolic', 0)
+            mapped_data['diastolic_bp'] = bp.get('diastolic', 0)
+        
         if environmental_data:
             # Add environmental data with appropriate field mapping
             env_mapping = {
@@ -120,9 +142,14 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str, environmental_d
                 'co2Level': 'env_co2_level'
             }
             
-            for env_key, sensor_key in env_mapping.items():
+            for env_key, model_key in env_mapping.items():
                 if env_key in environmental_data:
-                    combined_data[sensor_key] = environmental_data[env_key]
+                    mapped_data[model_key] = environmental_data[env_key]
+        
+        # Use mapped_data instead of combined_data for feature extraction
+        combined_data = mapped_data
+        
+        logger.info(f"Mapped data for model: {combined_data}")
         
         # Prepare features in the same order as training
         features = []
@@ -132,6 +159,7 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str, environmental_d
             features.append(float(value) if value is not None else 0.0)
         
         logger.info(f"Prepared features: {features}")
+        logger.info(f"Feature names: {feature_names}")
         
         # Convert to numpy array and reshape
         features_array = np.array(features, dtype=np.float64).reshape(1, -1)
@@ -149,15 +177,65 @@ def detect_anomaly_with_model(sensor_data: Dict, device_id: str, environmental_d
         result["confidence"] = float(abs(anomaly_score))
         
         if result["is_anomaly"]:
-            result["anomaly_type"].append("Statistical Outlier")
-            # Adjust thresholds for better accuracy
-            if float(anomaly_score) < -0.3:  # More restrictive threshold
+            # Analyze which type of anomaly this is based on feature values
+            anomaly_types = []
+            
+            # Check vital sign anomalies using mapped field names
+            hr = combined_data.get('heart_rate', 70)
+            sys_bp = combined_data.get('systolic_bp', 120)
+            dia_bp = combined_data.get('diastolic_bp', 80)
+            temp = combined_data.get('temperature', 37)
+            o2 = combined_data.get('oxygen_level', 98)
+            rr = combined_data.get('respiratory_rate', 16)
+            glucose = combined_data.get('glucose', 100)
+            
+            # Cardiac anomalies
+            if hr > 110 or hr < 50:
+                anomaly_types.append("Cardiac Rhythm Anomaly")
+            if sys_bp > 160 or sys_bp < 90 or dia_bp > 100 or dia_bp < 60:
+                anomaly_types.append("Blood Pressure Anomaly")
+            
+            # Respiratory anomalies
+            if o2 < 95 or rr > 25 or rr < 10:
+                anomaly_types.append("Respiratory Anomaly")
+            
+            # Temperature anomalies
+            if temp > 38.5 or temp < 35.5:
+                anomaly_types.append("Temperature Anomaly")
+            
+            # Metabolic anomalies
+            if glucose > 180 or glucose < 70:
+                anomaly_types.append("Metabolic Anomaly")
+            
+            # Environmental anomalies (if environmental data included)
+            if environmental_data:
+                env_temp = combined_data.get('env_temperature', 22)
+                env_humidity = combined_data.get('env_humidity', 45)
+                env_air_quality = combined_data.get('env_air_quality', 85)
+                env_noise = combined_data.get('env_noise_level', 35)
+                env_co2 = combined_data.get('env_co2_level', 400)
+                
+                if env_temp > 26 or env_temp < 18 or env_humidity > 70 or env_humidity < 30:
+                    anomaly_types.append("Environmental Climate Anomaly")
+                if env_air_quality < 60 or env_co2 > 800:
+                    anomaly_types.append("Air Quality Anomaly")
+                if env_noise > 60:
+                    anomaly_types.append("Noise Level Anomaly")
+            
+            # If no specific anomaly type found, use general classification
+            if not anomaly_types:
+                anomaly_types.append("Statistical Outlier")
+            
+            result["anomaly_type"] = anomaly_types
+            
+            # Adjust severity based on anomaly score - make thresholds more restrictive
+            if float(anomaly_score) < -0.5:  # Very restrictive threshold for HIGH
                 result["severity_level"] = "HIGH"
                 result["severity_score"] = float(abs(anomaly_score)) * 10
-            elif float(anomaly_score) < -0.15:  # Medium threshold
+            elif float(anomaly_score) < -0.35:  # More restrictive for MEDIUM
                 result["severity_level"] = "MEDIUM" 
                 result["severity_score"] = float(abs(anomaly_score)) * 8
-            else:  # Low severity for weak anomalies
+            else:  # Less severe anomalies
                 result["severity_level"] = "LOW"
                 result["severity_score"] = float(abs(anomaly_score)) * 5
         
@@ -309,14 +387,14 @@ def get_model_status():
     }
 
 @router.get("/detect/{monitor_id}")
-async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, background_tasks: BackgroundTasks = None):
+async def detect_anomaly(monitor_id: str, background_tasks: BackgroundTasks = None):
     """
     Detect anomalies for a specific monitor by getting its latest vitals
-    Optionally include environmental sensor data from the same room
+    Automatically includes environmental sensor data from the same room
     """
     try:
         # Log the received parameters for debugging
-        logger.info(f"Anomaly detection called for monitor_id: {monitor_id}, env_sensor_id: {env_sensor_id}")
+        logger.info(f"🔍 Anomaly detection endpoint called for monitor: {monitor_id}")
         
         # Get device data first to check if it exists and has a patient assigned
         device_ref = get_ref(f"iotData/{monitor_id}")
@@ -325,8 +403,14 @@ async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, b
         if not device_data:
             raise HTTPException(status_code=404, detail=f"Monitor {monitor_id} not found")
         
+        # Get monitor's room information
+        monitor_device_info = device_data.get("deviceInfo", {})
+        monitor_room_id = monitor_device_info.get("roomId")
+        
+        logger.info(f"Monitor {monitor_id} is located in room: {monitor_room_id}")
+        
         # Check if a patient is currently assigned to this monitor
-        current_patient_id = device_data.get("deviceInfo", {}).get("currentPatientId")
+        current_patient_id = monitor_device_info.get("currentPatientId")
         
         if not current_patient_id:
             raise HTTPException(status_code=400, detail=f"No patient assigned to monitor {monitor_id}")
@@ -342,26 +426,79 @@ async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, b
         latest_timestamp = sorted(patient_vitals.keys())[-1]
         latest_vitals = patient_vitals[latest_timestamp]
         
-        # Get environmental data if sensor ID is provided
+        # Automatically find environmental sensor in the same room
         env_data = None
-        if env_sensor_id:
+        env_sensor_id = None
+        
+        if monitor_room_id:
             try:
-                env_ref = get_ref(f"iotData/{env_sensor_id}")
-                env_device_data = env_ref.get()
+                logger.info(f"🔍 Searching for environmental sensor in room {monitor_room_id}")
                 
-                if env_device_data and env_device_data.get("deviceInfo", {}).get("type") == "environmental_sensor":
-                    env_vitals = env_device_data.get("vitals", {})
-                    if env_vitals:
-                        # Get the most recent environmental reading
-                        latest_env_timestamp = sorted(env_vitals.keys())[-1]
-                        env_data = env_vitals[latest_env_timestamp]
-                        logger.info(f"Including environmental data from sensor {env_sensor_id} for anomaly detection")
-                    else:
-                        logger.warning(f"No environmental data found for sensor {env_sensor_id}")
-                else:
-                    logger.warning(f"Environmental sensor {env_sensor_id} not found or invalid type")
+                # Get all IoT devices to find environmental sensor in the same room
+                iot_data_ref = get_ref("iotData")
+                all_devices = iot_data_ref.get() or {}
+                
+                logger.info(f"📋 Total devices found: {len(all_devices)}")
+                
+                # Debug: Log all devices and their room assignments
+                for device_id, device_info in all_devices.items():
+                    device_details = device_info.get("deviceInfo", {})
+                    device_type = device_details.get("type")
+                    device_room_id = device_details.get("roomId")
+                    
+                    logger.debug(f"  Device {device_id}: type={device_type}, roomId={device_room_id}")
+                    
+                    # Check if this is an environmental sensor in the same room
+                    if device_type == "environmental_sensor":
+                        logger.info(f"🌡️ Found environmental sensor {device_id} in room {device_room_id}")
+                        logger.debug(f"🔍 Device structure keys: {list(device_info.keys())}")
+                        
+                        if device_room_id == monitor_room_id:
+                            env_sensor_id = device_id
+                            logger.info(f"✅ Found matching environmental sensor {env_sensor_id} in room {monitor_room_id}")
+                            
+                            # Get the most recent environmental data 
+                            env_vitals = device_info.get("vitals", {})
+                            logger.info(f"🔍 Environmental vitals found: {bool(env_vitals)}")
+                            if env_vitals:
+                                logger.info(f"🔍 Number of vitals timestamps: {len(env_vitals)}")
+                                latest_env_timestamp = sorted(env_vitals.keys())[-1]
+                                env_data = env_vitals[latest_env_timestamp]
+                                logger.info(f"📊 Retrieved environmental data from timestamp: {latest_env_timestamp}")
+                                logger.info(f"📊 Environmental data keys: {list(env_data.keys())}")
+                            else:
+                                logger.warning(f"⚠️ Environmental sensor {env_sensor_id} has no data")
+                                logger.warning(f"⚠️ Device info structure: {list(device_info.keys())}")
+                            break
+                
+                if not env_sensor_id:
+                    logger.warning(f"⚠️ No environmental sensor found in room {monitor_room_id}")
+                    logger.info(f"🔍 Available environmental sensors:")
+                    for device_id, device_info in all_devices.items():
+                        device_details = device_info.get("deviceInfo", {})
+                        if device_details.get("type") == "environmental_sensor":
+                            logger.info(f"  - {device_id} in room {device_details.get('roomId', 'NO_ROOM')}")
+                    
+                    # Fallback: Try to find any environmental sensor if exact room match fails
+                    logger.info(f"🔄 Attempting fallback - using any available environmental sensor")
+                    for device_id, device_info in all_devices.items():
+                        device_details = device_info.get("deviceInfo", {})
+                        if device_details.get("type") == "environmental_sensor":
+                            env_vitals = device_info.get("vitals", {})
+                            if env_vitals:
+                                env_sensor_id = device_id
+                                latest_env_timestamp = sorted(env_vitals.keys())[-1]
+                                env_data = env_vitals[latest_env_timestamp]
+                                logger.info(f"🔄 Using fallback environmental sensor {env_sensor_id} (not in same room)")
+                                logger.info(f"📊 Fallback environmental data keys: {list(env_data.keys())}")
+                                break
+                            else:
+                                logger.warning(f"⚠️ Environmental sensor {device_id} has no vitals data")
+                    
             except Exception as e:
-                logger.error(f"Error retrieving environmental data from sensor {env_sensor_id}: {e}")
+                logger.error(f"❌ Error retrieving environmental data for room {monitor_room_id}: {e}")
+        else:
+            logger.warning(f"⚠️ Monitor {monitor_id} has no room information")
         
         # Perform anomaly detection with optional environmental data
         anomaly_result = detect_anomaly_with_model(
@@ -370,9 +507,17 @@ async def detect_anomaly(monitor_id: str, env_sensor_id: Optional[str] = None, b
             environmental_data=env_data
         )
         
-        # Add patient context to the result
+        # Add context to the result
         anomaly_result["patient_id"] = current_patient_id
         anomaly_result["vitals_timestamp"] = latest_timestamp
+        anomaly_result["room_id"] = monitor_room_id
+        anomaly_result["env_sensor_id"] = env_sensor_id
+        anomaly_result["env_data_included"] = env_data is not None
+        
+        if env_data:
+            logger.info(f"✅ Anomaly detection completed with environmental data from sensor {env_sensor_id}")
+        else:
+            logger.info(f"⚠️ Anomaly detection completed without environmental data")
         
         # Save results in background
         background_tasks.add_task(save_anomaly_log, anomaly_result)
